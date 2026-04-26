@@ -6,18 +6,25 @@ import 'controllers/quotation_controller.dart';
 import 'firebase_options.dart';
 import 'views/splash/splash_screen.dart';
 
+import 'services/notification_service.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Initialize Notifications
+  final notificationService = NotificationService();
+  await notificationService.init();
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthController()),
         ChangeNotifierProxyProvider<AuthController, QuotationController>(
-          create: (context) => QuotationController(context.read<AuthController>()),
-          update: (context, auth, previous) => previous ?? QuotationController(auth),
+          create: (context) =>
+              QuotationController(context.read<AuthController>()),
+          update: (context, auth, previous) =>
+              previous ?? QuotationController(auth),
         ),
       ],
       child: const MyApp(),

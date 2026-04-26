@@ -5,6 +5,7 @@ import '../utils/file_helper.dart';
 import '../utils/drive_helper.dart';
 import '../utils/media_sync_helper.dart';
 import 'auth_controller.dart';
+import '../services/notification_service.dart';
 
 class QuotationController with ChangeNotifier {
   final AuthController authController;
@@ -46,8 +47,8 @@ class QuotationController with ChangeNotifier {
     if (_quotations.isEmpty && authController.user != null) {
       await syncWithDrive();
     }
-    
     _isLoading = false;
+    _scheduleAllReminders();
     notifyListeners();
   }
 
@@ -88,8 +89,8 @@ class QuotationController with ChangeNotifier {
     } catch (e) {
       print("Sync error: $e");
     }
-
     _isLoading = false;
+    _scheduleAllReminders();
     notifyListeners();
   }
 
@@ -140,5 +141,18 @@ class QuotationController with ChangeNotifier {
     }
     
     notifyListeners();
+  }
+
+  void _scheduleAllReminders() {
+    for (var q in _quotations) {
+      if (q.reminderDate != null && q.reminderDate!.isAfter(DateTime.now())) {
+        NotificationService().scheduleNotification(
+          id: q.id.hashCode,
+          title: 'Quotation Follow-up',
+          body: 'Follow up with ${q.clientName} for quote ${q.quoteNumber}',
+          scheduledDate: q.reminderDate!,
+        );
+      }
+    }
   }
 }

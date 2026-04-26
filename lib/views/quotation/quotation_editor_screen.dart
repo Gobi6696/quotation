@@ -9,6 +9,9 @@ import '../../controllers/quotation_controller.dart';
 import '../../models/quotation_model.dart';
 import '../../utils/pdf_helper.dart';
 import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
+import '../../services/notification_service.dart';
 
 class QuotationEditorScreen extends StatefulWidget {
   final Quotation? quotation;
@@ -31,6 +34,7 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
   TextEditingController? _gstValueController;
   TextEditingController? _additionalCostLabelController;
   TextEditingController? _additionalCostValueController;
+  DateTime? _reminderDate;
 
   double _gstValue = 18.0;
   bool _isGstPercentage = true;
@@ -71,6 +75,7 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
       _showTransportation = widget.quotation!.showTransportation;
       _additionalCostLabel = widget.quotation!.additionalCostLabel;
       _additionalCostValue = widget.quotation!.additionalCostValue;
+      _reminderDate = widget.quotation!.reminderDate;
     } else {
       _id = const Uuid().v4();
       _quoteNoController = TextEditingController(
@@ -171,6 +176,7 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
         showTransportation: _showTransportation,
         additionalCostLabel: _additionalCostLabelController?.text ?? "",
         additionalCostValue: _additionalCostValue,
+        reminderDate: _reminderDate,
       );
 
       await context.read<QuotationController>().saveQuotation(quote);
@@ -180,6 +186,118 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
         );
         Navigator.pop(context);
       }
+    }
+  }
+
+  Future<void> _scheduleReminder() async {
+    final DateTime? pickedDate = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime.now(),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+    );
+
+    if (pickedDate != null) {
+      final TimeOfDay? pickedTime = await showTimePicker(
+        context: context,
+        initialTime: TimeOfDay.now(),
+      );
+
+      if (pickedTime != null) {
+        final DateTime scheduledDateTime = DateTime(
+          pickedDate.year,
+          pickedDate.month,
+          pickedDate.day,
+          pickedTime.hour,
+          pickedTime.minute,
+        );
+
+        if (scheduledDateTime.isBefore(DateTime.now())) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please select a future time')),
+          );
+          return;
+        }
+
+        await NotificationService().scheduleNotification(
+          id: _id.hashCode,
+          title: 'Quotation Follow-up',
+          body:
+              'Follow up with ${_clientNameController.text} for quote ${_quoteNoController.text}',
+          scheduledDate: scheduledDateTime,
+        );
+
+        setState(() {
+          _reminderDate = scheduledDateTime;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Reminder set for ${DateFormat('MMM d, h:mm a').format(scheduledDateTime)}',
+              ),
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _shareQuotation() async {
+    if (_items.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add at least one item')),
+      );
+      return;
+    }
+
+    final settings = context.read<QuotationController>().settings;
+    if (settings == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please set up Business Settings first')),
+      );
+      return;
+    }
+
+    try {
+      final pdfData = await PdfHelper.generateQuotation(
+        Quotation(
+          id: _id,
+          quoteNumber: _quoteNoController.text,
+          clientName: _clientNameController.text,
+          clientAddress: _clientAddressController.text,
+          clientPhone: _clientPhoneController.text,
+          date: _selectedDate,
+          items: _items,
+          gstValue: _gstValue,
+          isGstPercentage: _isGstPercentage,
+          showGst: _showGst,
+          transportationValue: _transportation,
+          isTransportationPercentage: _isTransportationPercentage,
+          showTransportation: _showTransportation,
+          additionalCostLabel: _additionalCostLabelController?.text ?? "",
+          additionalCostValue: _additionalCostValue,
+          reminderDate: _reminderDate,
+        ),
+        settings,
+      );
+
+      final tempDir = await getTemporaryDirectory();
+      final filePath =
+          "${tempDir.path}/${_quoteNoController.text.replaceAll('/', '_')}.pdf";
+      final file = File(filePath);
+      await file.writeAsBytes(pdfData);
+
+      await Share.shareXFiles(
+        [XFile(filePath)],
+        text: 'Quotation for ${_clientNameController.text}',
+        subject: 'Quotation ${_quoteNoController.text}',
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error sharing PDF: $e')),
+      );
     }
   }
 
@@ -229,6 +347,7 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
                         additionalCostLabel:
                             _additionalCostLabelController?.text ?? "",
                         additionalCostValue: _additionalCostValue,
+                        reminderDate: _reminderDate,
                       ),
                       settings,
                     );
@@ -561,6 +680,40 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: _scheduleReminder,
+              icon: const Icon(Icons.notifications_active),
+              label: const Text("Notify Me"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF6A11CB),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _shareQuotation,
+              icon: const Icon(Icons.share),
+              label: const Text("Share to WhatsApp"),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF25D366),
+                side: const BorderSide(color: Color(0xFF25D366)),
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
           ),
         ],
       ),

@@ -157,6 +157,7 @@ class Quotation {
 
   final String additionalCostLabel;
   final double additionalCostValue;
+  final DateTime? reminderDate;
 
   Quotation({
     required this.id,
@@ -174,6 +175,7 @@ class Quotation {
     this.showTransportation = true,
     this.additionalCostLabel = "",
     this.additionalCostValue = 0,
+    this.reminderDate,
   });
 
   double get subTotal => items.fold(0, (sum, item) => sum + item.totalValue);
@@ -212,6 +214,7 @@ class Quotation {
     'showTransportation': showTransportation,
     'additionalCostLabel': additionalCostLabel,
     'additionalCostValue': additionalCostValue,
+    'reminderDate': reminderDate?.toIso8601String(),
   };
 
   factory Quotation.fromJson(Map<String, dynamic> json) => Quotation(
@@ -232,5 +235,8 @@ class Quotation {
     showTransportation: json['showTransportation'] ?? true,
     additionalCostLabel: json['additionalCostLabel'] ?? "",
     additionalCostValue: (json['additionalCostValue'] as num? ?? 0).toDouble(),
+    reminderDate: json['reminderDate'] != null
+        ? DateTime.parse(json['reminderDate'])
+        : null,
   );
 }

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../controllers/auth_controller.dart';
 import '../auth/login_screen.dart';
 import '../dashboard/dashboard_screen.dart';
+import '../../services/notification_service.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -22,6 +23,10 @@ class _SplashScreenState extends State<SplashScreen> {
 
   _navigateToNext() async {
     await Future.delayed(const Duration(seconds: 3));
+    
+    // Request notification permissions after splash delay
+    await NotificationService().requestPermissions();
+    
     if (!mounted) return;
 
     final authController = Provider.of<AuthController>(context, listen: false);
