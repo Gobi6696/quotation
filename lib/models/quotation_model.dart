@@ -8,6 +8,9 @@ class QuotationItem {
   double height;
   double ratePerSqFt;
   double quantity;
+  double unitRate;
+  double unitQuantity;
+  bool isUnitBased;
 
   String remarks;
 
@@ -24,6 +27,9 @@ class QuotationItem {
     this.height = 0,
     this.ratePerSqFt = 0,
     this.quantity = 1,
+    this.unitRate = 0,
+    this.unitQuantity = 1,
+    this.isUnitBased = false,
     this.remarks = "",
     List<String>? images,
     Map<String, String>? accessories,
@@ -44,9 +50,11 @@ class QuotationItem {
              'Mesh Type': 'None',
            };
 
-  double get area => width * height;
+  double get area => isUnitBased ? 1.0 : width * height;
   double get totalExtras => extras.values.fold(0, (sum, val) => sum + val);
-  double get totalValue => ((area * ratePerSqFt) + totalExtras) * quantity;
+  double get totalValue => isUnitBased
+      ? ((unitRate + totalExtras) * unitQuantity)
+      : ((area * ratePerSqFt) + totalExtras) * quantity;
 
   // Helper to get description safely for UI display
   String get displayName =>
@@ -59,6 +67,9 @@ class QuotationItem {
     'height': height,
     'ratePerSqFt': ratePerSqFt,
     'quantity': quantity,
+    'unitRate': unitRate,
+    'unitQuantity': unitQuantity,
+    'isUnitBased': isUnitBased,
     'remarks': remarks,
     'images': images,
     'accessories': accessories,
@@ -68,7 +79,6 @@ class QuotationItem {
   };
 
   factory QuotationItem.fromJson(Map<String, dynamic> json) {
-    // Helper to safely convert and sanitize maps
     Map<String, String> sanitizeMap(dynamic source) {
       if (source == null || source is! Map) return {};
       final Map<String, String> result = {};
@@ -126,6 +136,9 @@ class QuotationItem {
       height: (json['height'] as num? ?? 0).toDouble(),
       ratePerSqFt: (json['ratePerSqFt'] as num? ?? 0).toDouble(),
       quantity: (json['quantity'] as num? ?? 1).toDouble(),
+      unitRate: (json['unitRate'] as num? ?? 0).toDouble(),
+      unitQuantity: (json['unitQuantity'] as num? ?? 1).toDouble(),
+      isUnitBased: json['isUnitBased'] ?? false,
       remarks: json['remarks']?.toString() ?? '',
       images: List<String>.from(json['images'] ?? []),
       accessories: migratedAcc,
@@ -157,6 +170,8 @@ class Quotation {
 
   final String additionalCostLabel;
   final double additionalCostValue;
+  final Map<String, String> additionalClientDetails;
+  final Map<String, double> summaryExtras;
   final DateTime? reminderDate;
 
   Quotation({
@@ -175,10 +190,15 @@ class Quotation {
     this.showTransportation = true,
     this.additionalCostLabel = "",
     this.additionalCostValue = 0,
+    this.additionalClientDetails = const {},
+    this.summaryExtras = const {},
     this.reminderDate,
   });
 
   double get subTotal => items.fold(0, (sum, item) => sum + item.totalValue);
+
+  double get totalSummaryExtras =>
+      summaryExtras.values.fold(0, (sum, val) => sum + val);
 
   double get transportationAmount {
     if (!showTransportation) return 0;
@@ -190,13 +210,20 @@ class Quotation {
   double get gstAmount {
     if (!showGst) return 0;
     return isGstPercentage
-        ? (subTotal + transportationAmount + additionalCostValue) *
+        ? (subTotal +
+                  transportationAmount +
+                  additionalCostValue +
+                  totalSummaryExtras) *
               (gstValue / 100)
         : gstValue;
   }
 
   double get grandTotal =>
-      subTotal + transportationAmount + additionalCostValue + gstAmount;
+      subTotal +
+      transportationAmount +
+      additionalCostValue +
+      totalSummaryExtras +
+      gstAmount;
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -214,6 +241,8 @@ class Quotation {
     'showTransportation': showTransportation,
     'additionalCostLabel': additionalCostLabel,
     'additionalCostValue': additionalCostValue,
+    'additionalClientDetails': additionalClientDetails,
+    'summaryExtras': summaryExtras,
     'reminderDate': reminderDate?.toIso8601String(),
   };
 
@@ -235,6 +264,11 @@ class Quotation {
     showTransportation: json['showTransportation'] ?? true,
     additionalCostLabel: json['additionalCostLabel'] ?? "",
     additionalCostValue: (json['additionalCostValue'] as num? ?? 0).toDouble(),
+    additionalClientDetails: (json['additionalClientDetails'] as Map? ?? {})
+        .map<String, String>((k, v) => MapEntry(k.toString(), v.toString())),
+    summaryExtras: (json['summaryExtras'] as Map? ?? {}).map<String, double>(
+      (k, v) => MapEntry(k.toString(), (v as num? ?? 0).toDouble()),
+    ),
     reminderDate: json['reminderDate'] != null
         ? DateTime.parse(json['reminderDate'])
         : null,

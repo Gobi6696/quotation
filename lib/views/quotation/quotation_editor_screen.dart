@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -46,6 +47,15 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
 
   String _additionalCostLabel = "";
   double _additionalCostValue = 0;
+  bool _isLoading = false;
+
+  // Dynamic Client Details
+  final List<TextEditingController> _clientDetailKeyControllers = [];
+  final List<TextEditingController> _clientDetailValueControllers = [];
+
+  // Dynamic Summary Extras
+  final List<TextEditingController> _summaryExtraKeyControllers = [];
+  final List<TextEditingController> _summaryExtraValueControllers = [];
 
   @override
   void initState() {
@@ -90,6 +100,20 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
     _transportationController = TextEditingController(
       text: _transportation.toString(),
     );
+
+    // Initialize dynamic fields if editing
+    if (widget.quotation != null) {
+      widget.quotation!.additionalClientDetails.forEach((key, value) {
+        _clientDetailKeyControllers.add(TextEditingController(text: key));
+        _clientDetailValueControllers.add(TextEditingController(text: value));
+      });
+      widget.quotation!.summaryExtras.forEach((key, value) {
+        _summaryExtraKeyControllers.add(TextEditingController(text: key));
+        _summaryExtraValueControllers.add(
+          TextEditingController(text: value.toString()),
+        );
+      });
+    }
   }
 
   @override
@@ -102,6 +126,10 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
     _gstValueController?.dispose();
     _additionalCostLabelController?.dispose();
     _additionalCostValueController?.dispose();
+    for (var c in _clientDetailKeyControllers) c.dispose();
+    for (var c in _clientDetailValueControllers) c.dispose();
+    for (var c in _summaryExtraKeyControllers) c.dispose();
+    for (var c in _summaryExtraValueControllers) c.dispose();
     super.dispose();
   }
 
@@ -114,16 +142,31 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
         : _transportation;
   }
 
+  double get _totalSummaryExtras {
+    double total = 0;
+    for (var controller in _summaryExtraValueControllers) {
+      total += double.tryParse(controller.text) ?? 0;
+    }
+    return total;
+  }
+
   double get _gstAmount {
     if (!_showGst) return 0;
     return _isGstPercentage
-        ? (_subTotal + _transportationAmount + _additionalCostValue) *
+        ? (_subTotal +
+                  _transportationAmount +
+                  _additionalCostValue +
+                  _totalSummaryExtras) *
               (_gstValue / 100)
         : _gstValue;
   }
 
   double get _grandTotal =>
-      _subTotal + _transportationAmount + _additionalCostValue + _gstAmount;
+      _subTotal +
+      _transportationAmount +
+      _additionalCostValue +
+      _totalSummaryExtras +
+      _gstAmount;
 
   void _addItem() {
     setState(() {
@@ -160,31 +203,60 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
         return;
       }
 
-      final quote = Quotation(
-        id: _id,
-        quoteNumber: _quoteNoController.text,
-        clientName: _clientNameController.text,
-        clientAddress: _clientAddressController.text,
-        clientPhone: _clientPhoneController.text,
-        date: _selectedDate,
-        items: _items,
-        gstValue: _gstValue,
-        isGstPercentage: _isGstPercentage,
-        showGst: _showGst,
-        transportationValue: _transportation,
-        isTransportationPercentage: _isTransportationPercentage,
-        showTransportation: _showTransportation,
-        additionalCostLabel: _additionalCostLabelController?.text ?? "",
-        additionalCostValue: _additionalCostValue,
-        reminderDate: _reminderDate,
-      );
+      setState(() => _isLoading = true);
+      try {
+        final Map<String, String> additionalClientDetails = {};
+        for (int i = 0; i < _clientDetailKeyControllers.length; i++) {
+          if (_clientDetailKeyControllers[i].text.isNotEmpty) {
+            additionalClientDetails[_clientDetailKeyControllers[i].text] =
+                _clientDetailValueControllers[i].text;
+          }
+        }
 
-      await context.read<QuotationController>().saveQuotation(quote);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Quotation saved and synced')),
+        final Map<String, double> summaryExtras = {};
+        for (int i = 0; i < _summaryExtraKeyControllers.length; i++) {
+          if (_summaryExtraKeyControllers[i].text.isNotEmpty) {
+            summaryExtras[_summaryExtraKeyControllers[i].text] =
+                double.tryParse(_summaryExtraValueControllers[i].text) ?? 0;
+          }
+        }
+
+        final quote = Quotation(
+          id: _id,
+          quoteNumber: _quoteNoController.text,
+          clientName: _clientNameController.text,
+          clientAddress: _clientAddressController.text,
+          clientPhone: _clientPhoneController.text,
+          date: _selectedDate,
+          items: _items,
+          gstValue: _gstValue,
+          isGstPercentage: _isGstPercentage,
+          showGst: _showGst,
+          transportationValue: _transportation,
+          isTransportationPercentage: _isTransportationPercentage,
+          showTransportation: _showTransportation,
+          additionalCostLabel: _additionalCostLabelController?.text ?? "",
+          additionalCostValue: _additionalCostValue,
+          additionalClientDetails: additionalClientDetails,
+          summaryExtras: summaryExtras,
+          reminderDate: _reminderDate,
         );
-        Navigator.pop(context);
+
+        await context.read<QuotationController>().saveQuotation(quote);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Quotation saved and synced')),
+          );
+          Navigator.pop(context);
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text('Error saving quotation: $e')));
+        }
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
       }
     }
   }
@@ -260,7 +332,24 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
       return;
     }
 
+    setState(() => _isLoading = true);
     try {
+      final Map<String, String> additionalClientDetails = {};
+      for (int i = 0; i < _clientDetailKeyControllers.length; i++) {
+        if (_clientDetailKeyControllers[i].text.isNotEmpty) {
+          additionalClientDetails[_clientDetailKeyControllers[i].text] =
+              _clientDetailValueControllers[i].text;
+        }
+      }
+
+      final Map<String, double> summaryExtras = {};
+      for (int i = 0; i < _summaryExtraKeyControllers.length; i++) {
+        if (_summaryExtraKeyControllers[i].text.isNotEmpty) {
+          summaryExtras[_summaryExtraKeyControllers[i].text] =
+              double.tryParse(_summaryExtraValueControllers[i].text) ?? 0;
+        }
+      }
+
       final pdfData = await PdfHelper.generateQuotation(
         Quotation(
           id: _id,
@@ -278,6 +367,8 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
           showTransportation: _showTransportation,
           additionalCostLabel: _additionalCostLabelController?.text ?? "",
           additionalCostValue: _additionalCostValue,
+          additionalClientDetails: additionalClientDetails,
+          summaryExtras: summaryExtras,
           reminderDate: _reminderDate,
         ),
         settings,
@@ -295,9 +386,13 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
         subject: 'Quotation ${_quoteNoController.text}',
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sharing PDF: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error sharing PDF: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -313,7 +408,7 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
-            onPressed: _items.isEmpty
+            onPressed: (_items.isEmpty || _isLoading)
                 ? null
                 : () async {
                     final settings = context
@@ -329,77 +424,193 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
                       );
                       return;
                     }
-                    final pdfData = await PdfHelper.generateQuotation(
-                      Quotation(
-                        id: _id,
-                        quoteNumber: _quoteNoController.text,
-                        clientName: _clientNameController.text,
-                        clientAddress: _clientAddressController.text,
-                        clientPhone: _clientPhoneController.text,
-                        date: _selectedDate,
-                        items: _items,
-                        gstValue: _gstValue,
-                        isGstPercentage: _isGstPercentage,
-                        showGst: _showGst,
-                        transportationValue: _transportation,
-                        isTransportationPercentage: _isTransportationPercentage,
-                        showTransportation: _showTransportation,
-                        additionalCostLabel:
-                            _additionalCostLabelController?.text ?? "",
-                        additionalCostValue: _additionalCostValue,
-                        reminderDate: _reminderDate,
-                      ),
-                      settings,
-                    );
-                    await Printing.layoutPdf(onLayout: (_) => pdfData);
+                    setState(() => _isLoading = true);
+                    try {
+                      final Map<String, String> additionalClientDetails = {};
+                      for (
+                        int i = 0;
+                        i < _clientDetailKeyControllers.length;
+                        i++
+                      ) {
+                        if (_clientDetailKeyControllers[i].text.isNotEmpty) {
+                          additionalClientDetails[_clientDetailKeyControllers[i]
+                                  .text] =
+                              _clientDetailValueControllers[i].text;
+                        }
+                      }
+
+                      final Map<String, double> summaryExtras = {};
+                      for (
+                        int i = 0;
+                        i < _summaryExtraKeyControllers.length;
+                        i++
+                      ) {
+                        if (_summaryExtraKeyControllers[i].text.isNotEmpty) {
+                          summaryExtras[_summaryExtraKeyControllers[i].text] =
+                              double.tryParse(
+                                _summaryExtraValueControllers[i].text,
+                              ) ??
+                              0;
+                        }
+                      }
+
+                      final pdfData = await PdfHelper.generateQuotation(
+                        Quotation(
+                          id: _id,
+                          quoteNumber: _quoteNoController.text,
+                          clientName: _clientNameController.text,
+                          clientAddress: _clientAddressController.text,
+                          clientPhone: _clientPhoneController.text,
+                          date: _selectedDate,
+                          items: _items,
+                          gstValue: _gstValue,
+                          isGstPercentage: _isGstPercentage,
+                          showGst: _showGst,
+                          transportationValue: _transportation,
+                          isTransportationPercentage:
+                              _isTransportationPercentage,
+                          showTransportation: _showTransportation,
+                          additionalCostLabel:
+                              _additionalCostLabelController?.text ?? "",
+                          additionalCostValue: _additionalCostValue,
+                          additionalClientDetails: additionalClientDetails,
+                          summaryExtras: summaryExtras,
+                          reminderDate: _reminderDate,
+                        ),
+                        settings,
+                      );
+                      await Printing.layoutPdf(onLayout: (_) => pdfData);
+                    } catch (e) {
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error generating PDF: $e')),
+                        );
+                      }
+                    } finally {
+                      if (mounted) setState(() => _isLoading = false);
+                    }
                   },
           ),
           IconButton(
             icon: const Icon(Icons.save, color: Color(0xFF6A11CB)),
-            onPressed: _saveQuote,
+            onPressed: _isLoading ? null : _saveQuote,
           ),
         ],
       ),
-      body: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionTitle('Client Details'),
-              _buildTextField('Quote Number', _quoteNoController),
-              _buildTextField('Client Name', _clientNameController),
-              _buildTextField(
-                'Client Address',
-                _clientAddressController,
-                maxLines: 2,
-              ),
-              _buildTextField('Client Phone', _clientPhoneController),
-
-              const SizedBox(height: 30),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      body: Stack(
+        children: [
+          Form(
+            key: _formKey,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildSectionTitle('Items'),
-                  TextButton.icon(
-                    onPressed: _addItem,
-                    icon: const Icon(Icons.add),
-                    label: const Text('Add Item'),
+                  _buildSectionTitle('Client Details'),
+                  _buildTextField('Quote Number', _quoteNoController),
+                  _buildTextField('Client Name', _clientNameController),
+                  _buildTextField(
+                    'Client Address',
+                    _clientAddressController,
+                    maxLines: 2,
                   ),
+                  _buildTextField(
+                    'Client Phone',
+                    _clientPhoneController,
+                    keyboardType: TextInputType.phone,
+                    maxLength: 10,
+                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                    validator: (value) {
+                      if (value == null || value.isEmpty) return 'Required';
+                      if (value.length != 10) return 'Must be 10 digits';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  ...List.generate(_clientDetailKeyControllers.length, (index) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: _buildTextField(
+                              'Title',
+                              _clientDetailKeyControllers[index],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            flex: 3,
+                            child: _buildTextField(
+                              'Data',
+                              _clientDetailValueControllers[index],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () {
+                              setState(() {
+                                _clientDetailKeyControllers[index].dispose();
+                                _clientDetailValueControllers[index].dispose();
+                                _clientDetailKeyControllers.removeAt(index);
+                                _clientDetailValueControllers.removeAt(index);
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _clientDetailKeyControllers.add(
+                          TextEditingController(),
+                        );
+                        _clientDetailValueControllers.add(
+                          TextEditingController(),
+                        );
+                      });
+                    },
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add Client Detail'),
+                  ),
+
+                  const SizedBox(height: 30),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildSectionTitle('Items'),
+                      TextButton.icon(
+                        onPressed: _isLoading ? null : _addItem,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add Item'),
+                      ),
+                    ],
+                  ),
+                  ..._items.asMap().entries.map(
+                    (entry) => _buildItemCard(entry.key, entry.value),
+                  ),
+
+                  const SizedBox(height: 30),
+                  _buildSectionTitle('Summary'),
+                  _buildSummaryCard(),
+                  const SizedBox(height: 100),
                 ],
               ),
-              ..._items.asMap().entries.map(
-                (entry) => _buildItemCard(entry.key, entry.value),
-              ),
-
-              const SizedBox(height: 30),
-              _buildSectionTitle('Summary'),
-              _buildSummaryCard(),
-              const SizedBox(height: 100),
-            ],
+            ),
           ),
-        ),
+          if (_isLoading)
+            Container(
+              color: Colors.black26,
+              child: const Center(
+                child: CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6A11CB)),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -422,23 +633,32 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
     String label,
     TextEditingController controller, {
     int maxLines = 1,
+    TextInputType? keyboardType,
+    int? maxLength,
+    List<TextInputFormatter>? inputFormatters,
+    String? Function(String?)? validator,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 15),
       child: TextFormField(
         controller: controller,
         maxLines: maxLines,
+        keyboardType: keyboardType,
+        maxLength: maxLength,
+        inputFormatters: inputFormatters,
         decoration: InputDecoration(
           labelText: label,
           filled: true,
           fillColor: Colors.white,
+          counterText: "", // Hide counter
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
             borderSide: BorderSide.none,
           ),
         ),
-        validator: (value) =>
-            value == null || value.isEmpty ? 'Required' : null,
+        validator:
+            validator ??
+            (value) => value == null || value.isEmpty ? 'Required' : null,
       ),
     );
   }
@@ -573,42 +793,69 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
 
           const SizedBox(height: 10),
 
-          // Additional Cost Row
-          Row(
-            children: [
-              const SizedBox(width: 48), // Match checkbox width
-              Expanded(
-                child: TextField(
-                  decoration: const InputDecoration(
-                    hintText: "Extra Cost Label (e.g. Installation)",
-                    hintStyle: TextStyle(fontSize: 12),
-                    isDense: true,
-                  ),
-                  onChanged: (val) => _additionalCostLabel = val,
-                  controller: _additionalCostLabelController ??=
-                      TextEditingController(text: _additionalCostLabel),
-                ),
-              ),
-              const SizedBox(width: 10),
-              SizedBox(
-                width: 80,
-                child: TextField(
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.end,
-                  decoration: const InputDecoration(
-                    prefixText: "₹",
-                    isDense: true,
-                  ),
-                  onChanged: (val) => setState(
-                    () => _additionalCostValue = double.tryParse(val) ?? 0,
-                  ),
-                  controller: _additionalCostValueController ??=
-                      TextEditingController(
-                        text: _additionalCostValue.toString(),
+          // Additional Cost Row (Now Dynamic)
+          ...List.generate(_summaryExtraKeyControllers.length, (index) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  const SizedBox(width: 48),
+                  Expanded(
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        hintText: "Extra Cost Label",
+                        hintStyle: TextStyle(fontSize: 12),
+                        isDense: true,
                       ),
-                ),
+                      controller: _summaryExtraKeyControllers[index],
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  SizedBox(
+                    width: 80,
+                    child: TextField(
+                      keyboardType: TextInputType.number,
+                      textAlign: TextAlign.end,
+                      decoration: const InputDecoration(
+                        prefixText: "₹",
+                        isDense: true,
+                      ),
+                      controller: _summaryExtraValueControllers[index],
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red, size: 20),
+                    onPressed: () {
+                      setState(() {
+                        _summaryExtraKeyControllers[index].dispose();
+                        _summaryExtraValueControllers[index].dispose();
+                        _summaryExtraKeyControllers.removeAt(index);
+                        _summaryExtraValueControllers.removeAt(index);
+                      });
+                    },
+                  ),
+                ],
               ),
-            ],
+            );
+          }),
+
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () {
+                setState(() {
+                  _summaryExtraKeyControllers.add(TextEditingController());
+                  _summaryExtraValueControllers.add(TextEditingController());
+                });
+              },
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text(
+                'Add Extra Cost',
+                style: TextStyle(fontSize: 12),
+              ),
+            ),
           ),
 
           const SizedBox(height: 10),
@@ -658,6 +905,17 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
               _transportationAmount,
               isSmall: true,
             ),
+          ...List.generate(_summaryExtraKeyControllers.length, (index) {
+            final label = _summaryExtraKeyControllers[index].text;
+            final value =
+                double.tryParse(_summaryExtraValueControllers[index].text) ?? 0;
+            if (label.isEmpty && value == 0) return const SizedBox.shrink();
+            return _summaryRow(
+              label.isEmpty ? "Extra Cost" : label,
+              value,
+              isSmall: true,
+            );
+          }),
           if (_showGst) _summaryRow("GST Amount", _gstAmount, isSmall: true),
 
           const Divider(height: 30),
@@ -685,7 +943,7 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: _scheduleReminder,
+              onPressed: _isLoading ? null : _scheduleReminder,
               icon: const Icon(Icons.notifications_active),
               label: const Text("Notify Me"),
               style: ElevatedButton.styleFrom(
@@ -702,7 +960,7 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: _shareQuotation,
+              onPressed: _isLoading ? null : _shareQuotation,
               icon: const Icon(Icons.share),
               label: const Text("Share to WhatsApp"),
               style: OutlinedButton.styleFrom(
@@ -805,11 +1063,13 @@ class _AdvancedItemEditorState extends State<AdvancedItemEditor>
   late TabController _tabController;
   late QuotationItem _editingItem;
 
-  late TextEditingController _widthController;
-  late TextEditingController _heightController;
-  late TextEditingController _rateController;
-  late TextEditingController _qtyController;
-  late TextEditingController _remarksController;
+  TextEditingController _widthController = TextEditingController();
+  TextEditingController _heightController = TextEditingController();
+  TextEditingController _rateController = TextEditingController();
+  TextEditingController _qtyController = TextEditingController();
+  TextEditingController _unitRateController = TextEditingController();
+  TextEditingController _unitQtyController = TextEditingController();
+  TextEditingController _remarksController = TextEditingController();
 
   // Dynamic controllers for basicInfo
   final List<TextEditingController> _basicKeyControllers = [];
@@ -829,19 +1089,13 @@ class _AdvancedItemEditorState extends State<AdvancedItemEditor>
     _tabController = TabController(length: 5, vsync: this);
     _editingItem = QuotationItem.fromJson(widget.item.toJson());
 
-    _widthController = TextEditingController(
-      text: _editingItem.width.toString(),
-    );
-    _heightController = TextEditingController(
-      text: _editingItem.height.toString(),
-    );
-    _rateController = TextEditingController(
-      text: _editingItem.ratePerSqFt.toString(),
-    );
-    _qtyController = TextEditingController(
-      text: _editingItem.quantity.toString(),
-    );
-    _remarksController = TextEditingController(text: _editingItem.remarks);
+    _widthController.text = _editingItem.width.toString();
+    _heightController.text = _editingItem.height.toString();
+    _rateController.text = _editingItem.ratePerSqFt.toString();
+    _qtyController.text = _editingItem.quantity.toString();
+    _unitRateController.text = _editingItem.unitRate.toString();
+    _unitQtyController.text = _editingItem.unitQuantity.toString();
+    _remarksController.text = _editingItem.remarks;
 
     // Initialize basicInfo controllers
     _editingItem.basicInfo.forEach((key, value) {
@@ -868,6 +1122,8 @@ class _AdvancedItemEditorState extends State<AdvancedItemEditor>
     _heightController.dispose();
     _rateController.dispose();
     _qtyController.dispose();
+    _unitRateController.dispose();
+    _unitQtyController.dispose();
     _remarksController.dispose();
     for (var c in _basicKeyControllers) c.dispose();
     for (var c in _basicValueControllers) c.dispose();
@@ -884,7 +1140,10 @@ class _AdvancedItemEditorState extends State<AdvancedItemEditor>
     _editingItem.height = double.tryParse(_heightController.text) ?? 0;
     _editingItem.ratePerSqFt = double.tryParse(_rateController.text) ?? 0;
     _editingItem.quantity = double.tryParse(_qtyController.text) ?? 1;
+    _editingItem.unitRate = double.tryParse(_unitRateController.text) ?? 0;
+    _editingItem.unitQuantity = double.tryParse(_unitQtyController.text) ?? 1;
     _editingItem.remarks = _remarksController.text;
+    // _editingItem.isUnitBased is already synced via setState in the UI toggle
 
     // Sync basicInfo
     _editingItem.basicInfo.clear();
@@ -1029,22 +1288,53 @@ class _AdvancedItemEditorState extends State<AdvancedItemEditor>
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
-          _editorField(
-            'Width (ft)',
-            _widthController,
-            type: TextInputType.number,
+          _buildModeToggle(
+            label: 'Pricing Mode',
+            value: _editingItem.isUnitBased,
+            onChanged: (val) => setState(() => _editingItem.isUnitBased = val),
+            activeLabel: 'Unit Based',
+            inactiveLabel: 'Area Based',
           ),
-          _editorField(
-            'Height (ft)',
-            _heightController,
-            type: TextInputType.number,
-          ),
-          _editorField(
-            'Rate per SqFt',
-            _rateController,
-            type: TextInputType.number,
-          ),
-          _editorField('Quantity', _qtyController, type: TextInputType.number),
+          const SizedBox(height: 20),
+          if (!_editingItem.isUnitBased) ...[
+            _editorField(
+              'Width (ft)',
+              _widthController,
+              type: TextInputType.number,
+              onChanged: (val) => setState(() {}),
+            ),
+            _editorField(
+              'Height (ft)',
+              _heightController,
+              type: TextInputType.number,
+              onChanged: (val) => setState(() {}),
+            ),
+            _editorField(
+              'Rate per SqFt (₹)',
+              _rateController,
+              type: TextInputType.number,
+              onChanged: (val) => setState(() {}),
+            ),
+            _editorField(
+              'Quantity',
+              _qtyController,
+              type: TextInputType.number,
+              onChanged: (val) => setState(() {}),
+            ),
+          ] else ...[
+            _editorField(
+              'Unit Price (₹)',
+              _unitRateController,
+              type: TextInputType.number,
+              onChanged: (val) => setState(() {}),
+            ),
+            _editorField(
+              'Quantity',
+              _unitQtyController,
+              type: TextInputType.number,
+              onChanged: (val) => setState(() {}),
+            ),
+          ],
           const SizedBox(height: 20),
           Container(
             padding: const EdgeInsets.all(15),
@@ -1076,11 +1366,87 @@ class _AdvancedItemEditorState extends State<AdvancedItemEditor>
   }
 
   double _calculatePreviewValue() {
-    double w = double.tryParse(_widthController.text) ?? 0;
-    double h = double.tryParse(_heightController.text) ?? 0;
-    double r = double.tryParse(_rateController.text) ?? 0;
-    double q = double.tryParse(_qtyController.text) ?? 1;
-    return (w * h * r) * q;
+    if (_editingItem.isUnitBased) {
+      double r = double.tryParse(_unitRateController.text) ?? 0;
+      double q = double.tryParse(_unitQtyController.text) ?? 1;
+      return r * q;
+    } else {
+      double w = double.tryParse(_widthController.text) ?? 0;
+      double h = double.tryParse(_heightController.text) ?? 0;
+      double r = double.tryParse(_rateController.text) ?? 0;
+      double q = double.tryParse(_qtyController.text) ?? 1;
+      return (w * h * r) * q;
+    }
+  }
+
+  Widget _buildModeToggle({
+    required String label,
+    required bool value,
+    required Function(bool) onChanged,
+    required String activeLabel,
+    required String inactiveLabel,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey[700],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          height: 45,
+          decoration: BoxDecoration(
+            color: Colors.grey[100],
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: _modeSwitchButton(
+                  inactiveLabel,
+                  !value,
+                  () => onChanged(false),
+                ),
+              ),
+              Expanded(
+                child: _modeSwitchButton(
+                  activeLabel,
+                  value,
+                  () => onChanged(true),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _modeSwitchButton(String label, bool active, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        alignment: Alignment.center,
+        margin: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: active ? const Color(0xFF6A11CB) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.poppins(
+            color: active ? Colors.white : Colors.grey[600],
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _buildSpecsTab() {
@@ -1293,6 +1659,7 @@ class _AdvancedItemEditorState extends State<AdvancedItemEditor>
     TextEditingController controller, {
     TextInputType type = TextInputType.text,
     int maxLines = 1,
+    Function(String)? onChanged,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 15),
@@ -1300,9 +1667,13 @@ class _AdvancedItemEditorState extends State<AdvancedItemEditor>
         controller: controller,
         keyboardType: type,
         maxLines: maxLines,
+        onChanged: onChanged,
         decoration: InputDecoration(
           labelText: label,
+          labelStyle: GoogleFonts.poppins(fontSize: 14),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          filled: true,
+          fillColor: Colors.white,
         ),
       ),
     );

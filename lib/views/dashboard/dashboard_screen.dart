@@ -304,43 +304,203 @@ class DashboardScreen extends StatelessWidget {
             ),
             const Divider(),
             Expanded(
-              child: controller.quotations.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No history found',
-                        style: GoogleFonts.poppins(color: Colors.grey),
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: controller.quotations.length,
-                      itemBuilder: (context, i) {
-                        final q = controller.quotations[i];
-                        return ListTile(
-                          title: Text(
-                            q.clientName,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+              child: Consumer<QuotationController>(
+                builder: (context, quoteController, _) {
+                  return quoteController.quotations.isEmpty
+                      ? Center(
+                          child: Text(
+                            'No history found',
+                            style: GoogleFonts.poppins(color: Colors.grey),
                           ),
-                          subtitle: Text(q.quoteNumber),
-                          trailing: Text(
-                            '₹${q.grandTotal.toStringAsFixed(2)}',
-                            style: const TextStyle(
-                              color: Color(0xFF6A11CB),
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          onTap: () {
-                            Navigator.pop(context);
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    QuotationEditorScreen(quotation: q),
+                        )
+                      : ListView.builder(
+                          itemCount: quoteController.quotations.length,
+                          itemBuilder: (context, i) {
+                            final q = quoteController.quotations[i];
+                            return Dismissible(
+                              key: Key(q.id),
+                              direction: DismissDirection.endToStart,
+                              background: Container(
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 20),
+                                color: Colors.red,
+                                child: const Icon(Icons.delete,
+                                    color: Colors.white),
+                              ),
+                              confirmDismiss: (direction) async {
+                                return await showDialog(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: Text(
+                                      'Delete Quotation',
+                                      style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    content: Text(
+                                      'Are you sure you want to delete this quotation? This will also remove it from Google Drive.',
+                                      style: GoogleFonts.poppins(),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, false),
+                                        child: Text(
+                                          'Cancel',
+                                          style: GoogleFonts.poppins(
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                      ),
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, true),
+                                        child: Text(
+                                          'Delete',
+                                          style: GoogleFonts.poppins(
+                                            color: Colors.red,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                              onDismissed: (direction) async {
+                                if (context.mounted) {
+                                  showDialog(
+                                    context: context,
+                                    barrierDismissible: false,
+                                    builder: (context) => const Center(
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  );
+                                }
+
+                                await quoteController.deleteQuotation(q.id);
+
+                                if (context.mounted) {
+                                  Navigator.pop(context); // Close loader
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Quotation deleted'),
+                                    ),
+                                  );
+                                }
+                              },
+                              child: ListTile(
+                                title: Text(
+                                  q.clientName,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold),
+                                ),
+                                subtitle: Text(q.quoteNumber),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      '₹${q.grandTotal.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        color: Color(0xFF6A11CB),
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline,
+                                          color: Colors.red),
+                                      onPressed: () async {
+                                        final confirmed = await showDialog<bool>(
+                                          context: context,
+                                          builder: (context) => AlertDialog(
+                                            title: Text(
+                                              'Delete Quotation',
+                                              style: GoogleFonts.poppins(
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            content: Text(
+                                              'Are you sure you want to delete this quotation? This will also remove it from Google Drive.',
+                                              style: GoogleFonts.poppins(),
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () =>
+                                                    Navigator.pop(context, false),
+                                                child: Text(
+                                                  'Cancel',
+                                                  style: GoogleFonts.poppins(
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
+                                              ),
+                                              TextButton(
+                                                onPressed: () =>
+                                                    Navigator.pop(context, true),
+                                                child: Text(
+                                                  'Delete',
+                                                  style: GoogleFonts.poppins(
+                                                    color: Colors.red,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+
+                                        if (confirmed == true) {
+                                          if (context.mounted) {
+                                            showDialog(
+                                              context: context,
+                                              barrierDismissible: false,
+                                              builder: (context) => const Center(
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            );
+                                          }
+
+                                          await quoteController
+                                              .deleteQuotation(q.id);
+
+                                          if (context.mounted) {
+                                            Navigator.pop(
+                                                context); // Close loader
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                content:
+                                                    Text('Quotation deleted'),
+                                              ),
+                                            );
+                                          }
+                                        }
+                                      },
+                                    ),
+                                  ],
+                                ),
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          QuotationEditorScreen(quotation: q),
+                                    ),
+                                  );
+                                },
                               ),
                             );
                           },
                         );
-                      },
-                    ),
+                },
+              ),
             ),
           ],
         ),

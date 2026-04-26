@@ -133,13 +133,16 @@ class QuotationController with ChangeNotifier {
   Future<void> deleteQuotation(String id) async {
     await FileHelper.deleteQuotation(id);
     _quotations.removeWhere((q) => q.id == id);
-    
+
     if (authController.user != null) {
       _driveDataCache.remove('quotation_$id');
-      final driveData = await MediaSyncHelper.prepareForUpload(_driveDataCache);
-      await DriveHelper.uploadUserData(authController.googleSignIn, driveData);
+      try {
+        final driveData = await MediaSyncHelper.prepareForUpload(_driveDataCache);
+        await DriveHelper.uploadUserData(authController.googleSignIn, driveData);
+      } catch (e) {
+        print("Error updating Drive after deletion: $e");
+      }
     }
-    
     notifyListeners();
   }
 
