@@ -12,6 +12,10 @@ class QuotationItem {
   double unitQuantity;
   bool isUnitBased;
 
+  String areaUnit; // 'ft', 'cm', 'mm', 'inch', 'meter'
+  String itemUnit; // 'pcs', 'kg', 'g', 'liter', etc.
+  bool multiplyByArea; // true = (W*H*R*Q), false = (R*Q)
+
   String remarks;
 
   // Collections
@@ -30,6 +34,9 @@ class QuotationItem {
     this.unitRate = 0,
     this.unitQuantity = 1,
     this.isUnitBased = false,
+    this.areaUnit = 'ft',
+    this.itemUnit = 'pcs',
+    this.multiplyByArea = true,
     this.remarks = "",
     List<String>? images,
     Map<String, String>? accessories,
@@ -52,9 +59,15 @@ class QuotationItem {
 
   double get area => isUnitBased ? 1.0 : width * height;
   double get totalExtras => extras.values.fold(0, (sum, val) => sum + val);
-  double get totalValue => isUnitBased
-      ? ((unitRate + totalExtras) * unitQuantity)
-      : ((area * ratePerSqFt) + totalExtras) * quantity;
+
+  double get totalValue {
+    if (isUnitBased) {
+      return ((unitRate + totalExtras) * unitQuantity);
+    } else {
+      double rateArea = multiplyByArea ? (width * height) : 1.0;
+      return ((rateArea * ratePerSqFt * quantity) + totalExtras);
+    }
+  }
 
   // Helper to get description safely for UI display
   String get displayName =>
@@ -70,6 +83,9 @@ class QuotationItem {
     'unitRate': unitRate,
     'unitQuantity': unitQuantity,
     'isUnitBased': isUnitBased,
+    'areaUnit': areaUnit,
+    'itemUnit': itemUnit,
+    'multiplyByArea': multiplyByArea,
     'remarks': remarks,
     'images': images,
     'accessories': accessories,
@@ -139,6 +155,9 @@ class QuotationItem {
       unitRate: (json['unitRate'] as num? ?? 0).toDouble(),
       unitQuantity: (json['unitQuantity'] as num? ?? 1).toDouble(),
       isUnitBased: json['isUnitBased'] ?? false,
+      areaUnit: json['areaUnit']?.toString() ?? 'ft',
+      itemUnit: json['itemUnit']?.toString() ?? 'pcs',
+      multiplyByArea: json['multiplyByArea'] ?? true,
       remarks: json['remarks']?.toString() ?? '',
       images: List<String>.from(json['images'] ?? []),
       accessories: migratedAcc,
@@ -147,6 +166,28 @@ class QuotationItem {
       ),
       basicInfo: migratedBasic,
       specs: migratedSpecs,
+    );
+  }
+
+  QuotationItem copy() {
+    return QuotationItem(
+      id: const Uuid().v4(), // Always new ID for a copy
+      width: width,
+      height: height,
+      ratePerSqFt: ratePerSqFt,
+      quantity: quantity,
+      unitRate: unitRate,
+      unitQuantity: unitQuantity,
+      isUnitBased: isUnitBased,
+      areaUnit: areaUnit,
+      itemUnit: itemUnit,
+      multiplyByArea: multiplyByArea,
+      remarks: remarks,
+      images: List.from(images),
+      accessories: Map.from(accessories),
+      extras: Map.from(extras),
+      basicInfo: Map.from(basicInfo),
+      specs: Map.from(specs),
     );
   }
 }
@@ -272,7 +313,7 @@ class Quotation {
     reminderDates: json['reminderDates'] != null
         ? (json['reminderDates'] as List).map((e) => DateTime.parse(e)).toList()
         : (json['reminderDate'] != null
-            ? [DateTime.parse(json['reminderDate'])]
-            : []),
+              ? [DateTime.parse(json['reminderDate'])]
+              : []),
   );
 }

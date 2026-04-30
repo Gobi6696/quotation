@@ -5,14 +5,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../utils/drive_helper.dart';
 
-
 class AuthController with ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: [
-      'email',
-      'https://www.googleapis.com/auth/drive.appdata',
-    ],
+    scopes: ['email', 'https://www.googleapis.com/auth/drive.appdata'],
   );
 
   GoogleSignIn get googleSignIn => _googleSignIn;
@@ -36,7 +32,7 @@ class AuthController with ChangeNotifier {
       _localUserData = json.decode(userDataString);
       notifyListeners();
     }
-    
+
     // Also sync with Firebase state
     _auth.authStateChanges().listen((User? user) {
       _user = user;
@@ -46,7 +42,6 @@ class AuthController with ChangeNotifier {
       notifyListeners();
     });
   }
-
 
   Future<void> loginWithGoogle() async {
     try {
@@ -60,19 +55,21 @@ class AuthController with ChangeNotifier {
         return;
       }
 
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
       final AuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
-      final UserCredential userCredential = await _auth.signInWithCredential(credential);
+      final UserCredential userCredential = await _auth.signInWithCredential(
+        credential,
+      );
       _user = userCredential.user;
 
       if (_user != null) {
         await _saveUserLocally(_user!);
       }
-
 
       _isLoading = false;
       notifyListeners();
@@ -88,10 +85,8 @@ class AuthController with ChangeNotifier {
       _isLoading = true;
       notifyListeners();
 
-      final UserCredential userCredential = await _auth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      final UserCredential userCredential = await _auth
+          .signInWithEmailAndPassword(email: email, password: password);
       _user = userCredential.user;
 
       if (_user != null) {
@@ -118,7 +113,6 @@ class AuthController with ChangeNotifier {
     await prefs.setString('user_data', json.encode(userData));
     return userData;
   }
-
 
   Future<void> signOut() async {
     await _auth.signOut();

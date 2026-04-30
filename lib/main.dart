@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'controllers/auth_controller.dart';
 import 'controllers/quotation_controller.dart';
+import 'controllers/inventory_controller.dart';
 import 'firebase_options.dart';
 import 'views/splash/splash_screen.dart';
 
@@ -25,6 +26,12 @@ void main() async {
               QuotationController(context.read<AuthController>()),
           update: (context, auth, previous) =>
               previous ?? QuotationController(auth),
+        ),
+        ChangeNotifierProxyProvider<AuthController, InventoryController>(
+          create: (context) =>
+              InventoryController(context.read<AuthController>()),
+          update: (context, auth, previous) =>
+              previous ?? InventoryController(auth),
         ),
       ],
       child: const MyApp(),

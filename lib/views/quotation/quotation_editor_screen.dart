@@ -14,6 +14,7 @@ import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../services/notification_service.dart';
+import '../../controllers/inventory_controller.dart';
 
 class QuotationEditorScreen extends StatefulWidget {
   final Quotation? quotation;
@@ -768,95 +769,232 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
   }
 
   Widget _buildItemCard(int index, QuotationItem item) {
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(15),
-          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 5)],
-        ),
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 15,
-            vertical: 5,
-          ),
-          onTap: () => _editItem(index),
-          leading: item.images.isNotEmpty
-              ? ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: Image.file(
-                    File(item.images.first),
-                    width: 50,
-                    height: 50,
-                    fit: BoxFit.cover,
-                  ),
-                )
-              : Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(Icons.image_not_supported),
-                ),
-          title: Text(
-            item.displayName,
-            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-          ),
-          subtitle: Text(
-            item.basicInfo.entries
-                .where((e) => e.key.toLowerCase() != 'description')
-                .map((e) => "${e.key}: ${e.value}")
-                .take(2)
-                .join(" | "),
-          ),
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
+    return Card(
+      margin: const EdgeInsets.only(bottom: 15),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      elevation: 2,
+      child: InkWell(
+        onTap: () => _editItem(index),
+        borderRadius: BorderRadius.circular(15),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                "₹${item.totalValue.toStringAsFixed(2)}",
-                style: GoogleFonts.poppins(
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF6A11CB),
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text('Delete Item'),
-                      content: const Text(
-                        'Are you sure you want to delete this item?',
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Cancel'),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  item.images.isNotEmpty
+                      ? ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.file(
+                            File(item.images.first),
+                            width: 60,
+                            height: 60,
+                            fit: BoxFit.cover,
+                          ),
+                        )
+                      : Container(
+                          width: 60,
+                          height: 60,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.image_outlined,
+                            color: Colors.grey,
+                          ),
                         ),
-                        TextButton(
-                          onPressed: () {
-                            setState(() => _items.removeAt(index));
-                            Navigator.pop(context);
-                          },
-                          child: const Text(
-                            'Delete',
-                            style: TextStyle(color: Colors.red),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.displayName,
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          item.basicInfo.entries
+                              .where(
+                                (e) => e.key.toLowerCase() != 'description',
+                              )
+                              .map((e) => "${e.key}: ${e.value}")
+                              .take(2)
+                              .join(" | "),
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.grey[600],
                           ),
                         ),
                       ],
                     ),
-                  );
-                },
+                  ),
+                ],
+              ),
+              const Divider(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Total Value",
+                        style: GoogleFonts.poppins(
+                          fontSize: 11,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      Text(
+                        "₹${item.totalValue.toStringAsFixed(2)}",
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF6A11CB),
+                          fontSize: 17,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      Container(
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.grey[50],
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            _qtyButton(Icons.remove, Colors.red, () {
+                              setState(() {
+                                if (item.isUnitBased) {
+                                  if (item.unitQuantity > 1)
+                                    item.unitQuantity--;
+                                } else {
+                                  if (item.quantity > 1) item.quantity--;
+                                }
+                              });
+                            }),
+                            Container(
+                              width: 45,
+                              alignment: Alignment.center,
+                              child: TextField(
+                                textAlign: TextAlign.center,
+                                keyboardType: TextInputType.number,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                decoration: const InputDecoration(
+                                  isDense: true,
+                                  contentPadding: EdgeInsets.zero,
+                                  border: InputBorder.none,
+                                ),
+                                onChanged: (val) {
+                                  double? newVal = double.tryParse(val);
+                                  if (newVal != null && newVal > 0) {
+                                    setState(() {
+                                      if (item.isUnitBased) {
+                                        item.unitQuantity = newVal;
+                                      } else {
+                                        item.quantity = newVal;
+                                      }
+                                    });
+                                  }
+                                },
+                                controller:
+                                    TextEditingController(
+                                        text:
+                                            (item.isUnitBased
+                                                    ? item.unitQuantity
+                                                    : item.quantity)
+                                                .toInt()
+                                                .toString(),
+                                      )
+                                      ..selection = TextSelection.fromPosition(
+                                        TextPosition(
+                                          offset:
+                                              (item.isUnitBased
+                                                      ? item.unitQuantity
+                                                      : item.quantity)
+                                                  .toInt()
+                                                  .toString()
+                                                  .length,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                            _qtyButton(Icons.add, Colors.green, () {
+                              setState(() {
+                                if (item.isUnitBased) {
+                                  item.unitQuantity++;
+                                } else {
+                                  item.quantity++;
+                                }
+                              });
+                            }),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: Colors.redAccent,
+                        ),
+                        onPressed: () => _showDeleteConfirm(index),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _qtyButton(IconData icon, Color color, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        width: 30,
+        height: 34,
+        alignment: Alignment.center,
+        child: Icon(icon, size: 16, color: color),
+      ),
+    );
+  }
+
+  void _showDeleteConfirm(int index) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: const Text('Delete Item'),
+        content: const Text('Are you sure you want to delete this item?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() => _items.removeAt(index));
+              Navigator.pop(context);
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
       ),
     );
   }
@@ -1332,11 +1470,13 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
 class AdvancedItemEditor extends StatefulWidget {
   final QuotationItem item;
   final Function(QuotationItem) onSave;
+  final bool isInventoryMode;
 
   const AdvancedItemEditor({
     super.key,
     required this.item,
     required this.onSave,
+    this.isInventoryMode = false,
   });
 
   @override
@@ -1367,6 +1507,8 @@ class _AdvancedItemEditorState extends State<AdvancedItemEditor>
   // Dynamic controllers for accessories
   final List<TextEditingController> _accKeyControllers = [];
   final List<TextEditingController> _accValueControllers = [];
+
+  bool _saveToInventory = false;
 
   @override
   void initState() {
@@ -1479,6 +1621,12 @@ class _AdvancedItemEditorState extends State<AdvancedItemEditor>
             icon: const Icon(Icons.check),
             onPressed: () {
               _syncState();
+              if (_saveToInventory) {
+                Provider.of<InventoryController>(
+                  context,
+                  listen: false,
+                ).saveItem(_editingItem.copy());
+              }
               widget.onSave(_editingItem);
               Navigator.pop(context);
             },
@@ -1499,10 +1647,46 @@ class _AdvancedItemEditorState extends State<AdvancedItemEditor>
   }
 
   Widget _buildBasicTab() {
+    final inventory = Provider.of<InventoryController>(context);
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
+          if (inventory.items.isNotEmpty) ...[
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
+                ),
+                borderRadius: BorderRadius.circular(15),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.blue.withOpacity(0.3),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: ElevatedButton.icon(
+                onPressed: () => _showInventoryPicker(context, inventory),
+                icon: const Icon(Icons.inventory_2, color: Colors.white),
+                label: Text(
+                  'Import from Master Inventory',
+                  style: GoogleFonts.poppins(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  padding: const EdgeInsets.symmetric(vertical: 15),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
           Expanded(
             child: ListView.builder(
               itemCount: _basicKeyControllers.length,
@@ -1563,9 +1747,118 @@ class _AdvancedItemEditorState extends State<AdvancedItemEditor>
             icon: const Icon(Icons.add),
             label: const Text('Add Detail'),
           ),
+          if (!widget.isInventoryMode) ...[
+            const Divider(height: 30),
+            CheckboxListTile(
+              title: const Text('Save this item to Master Inventory'),
+              subtitle: const Text('Save for future quotations'),
+              value: _saveToInventory,
+              onChanged: (val) =>
+                  setState(() => _saveToInventory = val ?? false),
+              controlAffinity: ListTileControlAffinity.leading,
+              activeColor: const Color(0xFF6A11CB),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  void _showInventoryPicker(
+    BuildContext context,
+    InventoryController inventory,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Text(
+              'Select Item',
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 15),
+            Expanded(
+              child: ListView.builder(
+                itemCount: inventory.items.length,
+                itemBuilder: (context, index) {
+                  final item = inventory.items[index];
+                  return ListTile(
+                    leading: item.images.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(5),
+                            child: Image.file(
+                              File(item.images.first),
+                              width: 40,
+                              height: 40,
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : const Icon(Icons.image_not_supported),
+                    title: Text(
+                      item.displayName,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Text(
+                      item.isUnitBased ? 'Unit Based' : 'Area Based',
+                    ),
+                    onTap: () {
+                      _applyInventoryItem(item);
+                      Navigator.pop(context);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _applyInventoryItem(QuotationItem master) {
+    setState(() {
+      _editingItem = master.copy();
+
+      _widthController.text = _editingItem.width.toString();
+      _heightController.text = _editingItem.height.toString();
+      _rateController.text = _editingItem.ratePerSqFt.toString();
+      _qtyController.text = _editingItem.quantity.toString();
+      _unitRateController.text = _editingItem.unitRate.toString();
+      _unitQtyController.text = _editingItem.unitQuantity.toString();
+      _remarksController.text = _editingItem.remarks;
+
+      _basicKeyControllers.clear();
+      _basicValueControllers.clear();
+      _editingItem.basicInfo.forEach((key, value) {
+        _basicKeyControllers.add(TextEditingController(text: key));
+        _basicValueControllers.add(TextEditingController(text: value));
+      });
+
+      _specKeyControllers.clear();
+      _specValueControllers.clear();
+      _editingItem.specs.forEach((key, value) {
+        _specKeyControllers.add(TextEditingController(text: key));
+        _specValueControllers.add(TextEditingController(text: value));
+      });
+
+      _accKeyControllers.clear();
+      _accValueControllers.clear();
+      _editingItem.accessories.forEach((key, value) {
+        _accKeyControllers.add(TextEditingController(text: key));
+        _accValueControllers.add(TextEditingController(text: value));
+      });
+    });
   }
 
   Widget _buildValuesTab() {
@@ -1582,42 +1875,92 @@ class _AdvancedItemEditorState extends State<AdvancedItemEditor>
           ),
           const SizedBox(height: 20),
           if (!_editingItem.isUnitBased) ...[
-            _editorField(
-              'Width (ft)',
-              _widthController,
-              type: TextInputType.number,
-              onChanged: (val) => setState(() {}),
+            _buildUnitSelector(),
+            const SizedBox(height: 15),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: _editorField(
+                    'Width',
+                    _widthController,
+                    type: TextInputType.number,
+                    suffix: _editingItem.areaUnit,
+                    onChanged: (v) => setState(() {}),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 15,
+                  ),
+                  child: Text(
+                    '*',
+                    style: GoogleFonts.poppins(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: _editorField(
+                    'Height',
+                    _heightController,
+                    type: TextInputType.number,
+                    suffix: _editingItem.areaUnit,
+                    onChanged: (v) => setState(() {}),
+                  ),
+                ),
+              ],
             ),
             _editorField(
-              'Height (ft)',
-              _heightController,
-              type: TextInputType.number,
-              onChanged: (val) => setState(() {}),
-            ),
-            _editorField(
-              'Rate per SqFt (₹)',
+              'Rate (₹)',
               _rateController,
               type: TextInputType.number,
-              onChanged: (val) => setState(() {}),
+              onChanged: (v) => setState(() {}),
             ),
             _editorField(
               'Quantity',
               _qtyController,
               type: TextInputType.number,
-              onChanged: (val) => setState(() {}),
+              onChanged: (v) => setState(() {}),
+            ),
+            const SizedBox(height: 10),
+            _buildModeToggle(
+              label: 'Calculation Basis',
+              value: _editingItem.multiplyByArea,
+              onChanged: (val) =>
+                  setState(() => _editingItem.multiplyByArea = val),
+              activeLabel: 'Rate per Area',
+              inactiveLabel: 'Fixed per Item',
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _editingItem.multiplyByArea
+                  ? 'Formula: (Width * Height) * Rate * Qty'
+                  : 'Formula: Rate * Qty (Area is for display only)',
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: Colors.grey[600],
+                fontStyle: FontStyle.italic,
+              ),
             ),
           ] else ...[
+            _buildItemUnitSelector(),
+            const SizedBox(height: 15),
             _editorField(
               'Unit Price (₹)',
               _unitRateController,
               type: TextInputType.number,
-              onChanged: (val) => setState(() {}),
+              onChanged: (v) => setState(() {}),
             ),
             _editorField(
               'Quantity',
               _unitQtyController,
               type: TextInputType.number,
-              onChanged: (val) => setState(() {}),
+              suffix: _editingItem.itemUnit,
+              onChanged: (v) => setState(() {}),
             ),
           ],
           const SizedBox(height: 20),
@@ -1654,14 +1997,160 @@ class _AdvancedItemEditorState extends State<AdvancedItemEditor>
     if (_editingItem.isUnitBased) {
       double r = double.tryParse(_unitRateController.text) ?? 0;
       double q = double.tryParse(_unitQtyController.text) ?? 1;
-      return r * q;
+      return (r + _editingItem.totalExtras) * q;
     } else {
       double w = double.tryParse(_widthController.text) ?? 0;
       double h = double.tryParse(_heightController.text) ?? 0;
       double r = double.tryParse(_rateController.text) ?? 0;
       double q = double.tryParse(_qtyController.text) ?? 1;
-      return (w * h * r) * q;
+
+      double rateArea = _editingItem.multiplyByArea ? (w * h) : 1.0;
+      return ((rateArea * r * q) + _editingItem.totalExtras);
     }
+  }
+
+  Widget _buildUnitSelector() {
+    final units = ['ft', 'meter', 'cm', 'mm', 'inch'];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Area Measurement Unit',
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey[700],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _editingItem.areaUnit,
+              isExpanded: true,
+              items: units
+                  .map(
+                    (u) => DropdownMenuItem(
+                      value: u,
+                      child: Text(u.toUpperCase()),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (val) {
+                if (val != null) _convertUnits(_editingItem.areaUnit, val);
+              },
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _convertUnits(String oldUnit, String newUnit) {
+    // Conversion factors to Meter
+    final toMeter = {
+      'ft': 0.3048,
+      'meter': 1.0,
+      'cm': 0.01,
+      'mm': 0.001,
+      'inch': 0.0254,
+    };
+
+    double w = double.tryParse(_widthController.text) ?? 0;
+    double h = double.tryParse(_heightController.text) ?? 0;
+
+    // Convert current values to Meter first
+    double wMeter = w * (toMeter[oldUnit] ?? 1);
+    double hMeter = h * (toMeter[oldUnit] ?? 1);
+
+    // Convert from Meter to new unit
+    double wNew = wMeter / (toMeter[newUnit] ?? 1);
+    double hNew = hMeter / (toMeter[newUnit] ?? 1);
+
+    setState(() {
+      _editingItem.areaUnit = newUnit;
+      _widthController.text = wNew.toStringAsFixed(2);
+      _heightController.text = hNew.toStringAsFixed(2);
+    });
+  }
+
+  Widget _buildItemUnitSelector() {
+    final commonUnits = [
+      'pcs',
+      'kg',
+      'g',
+      'tonne',
+      'liter',
+      'ml',
+      'box',
+      'set',
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Item Unit',
+          style: GoogleFonts.poppins(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey[700],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: commonUnits.contains(_editingItem.itemUnit)
+                        ? _editingItem.itemUnit
+                        : null,
+                    isExpanded: true,
+                    hint: const Text('Select Unit'),
+                    items: commonUnits
+                        .map(
+                          (u) => DropdownMenuItem(
+                            value: u,
+                            child: Text(u.toUpperCase()),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (val) =>
+                        setState(() => _editingItem.itemUnit = val ?? 'pcs'),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextField(
+                decoration: InputDecoration(
+                  hintText: 'Manual Unit',
+                  isDense: true,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onChanged: (val) => setState(() => _editingItem.itemUnit = val),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 
   Widget _buildModeToggle({
@@ -1944,6 +2433,7 @@ class _AdvancedItemEditorState extends State<AdvancedItemEditor>
     TextEditingController controller, {
     TextInputType type = TextInputType.text,
     int maxLines = 1,
+    String? suffix,
     Function(String)? onChanged,
   }) {
     return Padding(
@@ -1955,6 +2445,7 @@ class _AdvancedItemEditorState extends State<AdvancedItemEditor>
         onChanged: onChanged,
         decoration: InputDecoration(
           labelText: label,
+          suffixText: suffix,
           labelStyle: GoogleFonts.poppins(fontSize: 14),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           filled: true,

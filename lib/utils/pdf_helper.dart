@@ -269,23 +269,29 @@ class PdfHelper {
               bottom: bSide,
             ),
             columnWidths: {
-              0: const pw.FixedColumnWidth(45),
+              0: const pw.FixedColumnWidth(55),
               1: const pw.FlexColumnWidth(1),
-              2: const pw.FixedColumnWidth(65),
+              2: const pw.FixedColumnWidth(40),
               3: const pw.FlexColumnWidth(1),
             },
             children: [
               _row(
                 [
+                  'Product :',
+                  item.displayName,
                   'Size :',
-                  'W: ${item.width}, H: ${item.height}',
-                  '',
-                  '',
+                  '${item.width} x ${item.height} ${item.areaUnit}',
                 ],
                 bgColor: greyColor,
                 isBold: true,
               ),
-              ..._buildDynamicHeaderRows(item.basicInfo, greyColor, font, fontBold),
+              ..._buildDynamicHeaderRows(
+                  item.basicInfo.entries
+                      .where((e) => e.key.toLowerCase() != 'description')
+                      .fold<Map<String, String>>({}, (p, e) => p..[e.key] = e.value),
+                  greyColor,
+                  font,
+                  fontBold),
             ],
           ),
 
@@ -348,25 +354,27 @@ class PdfHelper {
                           top: bSide,
                           bottom: bSide,
                         ),
-                        children: [
-                          _row([
-                            'Sq.Ft. per window',
-                            '${item.area.toStringAsFixed(3)} Sq.Ft.',
-                          ]),
-                          _row([
-                            'Value per Sq.Ft.',
-                            '${item.ratePerSqFt.toStringAsFixed(2)} Rs.',
-                          ]),
-                          _row([
-                            'Unit Price',
-                            '${(item.area * item.ratePerSqFt).toStringAsFixed(2)} Rs.',
-                          ]),
-                          _row(['Quantity', '${item.quantity.toInt()} Pcs']),
-                          _row([
-                            'Value',
-                            '${item.totalValue.toStringAsFixed(2)} Rs.',
-                          ]),
-                        ],
+                        children: item.isUnitBased 
+                          ? [
+                              _row(['Rate', '${item.unitRate.toStringAsFixed(2)} Rs. / ${item.itemUnit}']),
+                              _row(['Quantity', '${item.unitQuantity} ${item.itemUnit}']),
+                              _row(['Total Value', '${item.totalValue.toStringAsFixed(2)} Rs.']),
+                            ]
+                          : [
+                              _row([
+                                item.multiplyByArea ? 'Area (${item.areaUnit}²)' : 'Size Info',
+                                '${item.area.toStringAsFixed(3)} ${item.areaUnit}${item.multiplyByArea ? '²' : ''}',
+                              ]),
+                              _row([
+                                'Rate per ${item.multiplyByArea ? (item.areaUnit + '²') : 'Item'}',
+                                '${item.ratePerSqFt.toStringAsFixed(2)} Rs.',
+                              ]),
+                              _row(['Quantity', '${item.quantity.toInt()} Pcs']),
+                              _row([
+                                'Total Value',
+                                '${item.totalValue.toStringAsFixed(2)} Rs.',
+                              ]),
+                            ],
                       ),
 
                       // Profile & Accessories Row

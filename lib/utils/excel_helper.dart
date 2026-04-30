@@ -80,8 +80,8 @@ class ExcelHelper {
 
     // 3. Items Header
     final List<String> headers = [
-      'S.No', 'Preview', 'Description', 'Specifications', 'Accessories', 
-      'Size (W x H)', 'Area (Sqft)', 'Rate (Rs)', 'Qty', 'Total (Rs)', 'Remarks'
+      'S.No', 'Preview', 'Product / Description', 'Specifications', 'Accessories', 
+      'Size (W x H)', 'Area / Units', 'Rate (Rs)', 'Qty', 'Total (Rs)', 'Remarks'
     ];
     for (int i = 0; i < headers.length; i++) {
       final Range cell = sheet.getRangeByIndex(currentRow, i + 1);
@@ -99,10 +99,19 @@ class ExcelHelper {
       sheet.getRangeByIndex(currentRow, 3).setText(item.displayName);
       sheet.getRangeByIndex(currentRow, 4).setText(item.specs.entries.map((e) => "${e.key}: ${e.value}").join("\n"));
       sheet.getRangeByIndex(currentRow, 5).setText(item.accessories.entries.map((e) => "${e.key}: ${e.value}").join("\n"));
-      sheet.getRangeByIndex(currentRow, 6).setText('${item.width} x ${item.height}');
-      sheet.getRangeByIndex(currentRow, 7).setNumber(item.area);
-      sheet.getRangeByIndex(currentRow, 8).setNumber(item.ratePerSqFt);
-      sheet.getRangeByIndex(currentRow, 9).setNumber(item.quantity);
+      
+      if (item.isUnitBased) {
+        sheet.getRangeByIndex(currentRow, 6).setText('Unit Based');
+        sheet.getRangeByIndex(currentRow, 7).setText('${item.itemUnit}');
+        sheet.getRangeByIndex(currentRow, 8).setNumber(item.unitRate);
+        sheet.getRangeByIndex(currentRow, 9).setNumber(item.unitQuantity);
+      } else {
+        sheet.getRangeByIndex(currentRow, 6).setText('${item.width} x ${item.height} ${item.areaUnit}');
+        sheet.getRangeByIndex(currentRow, 7).setText('${item.area.toStringAsFixed(2)} ${item.areaUnit}${item.multiplyByArea ? "²" : ""}');
+        sheet.getRangeByIndex(currentRow, 8).setNumber(item.ratePerSqFt);
+        sheet.getRangeByIndex(currentRow, 9).setNumber(item.quantity);
+      }
+      
       sheet.getRangeByIndex(currentRow, 10).setNumber(item.totalValue);
       sheet.getRangeByIndex(currentRow, 11).setText(item.remarks);
 

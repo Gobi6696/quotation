@@ -9,6 +9,8 @@ import '../../controllers/quotation_controller.dart';
 import '../quotation/quotation_editor_screen.dart';
 import '../settings/settings_screen.dart';
 import '../settings/template_editor_screen.dart';
+import '../inventory/inventory_screen.dart';
+import '../../controllers/inventory_controller.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -183,6 +185,22 @@ class DashboardScreen extends StatelessWidget {
                   Colors.orange,
                   () => _showHistoryBottomSheet(context, quoteController),
                 ),
+              ],
+            ),
+            const SizedBox(height: 15),
+            Row(
+              children: [
+                _buildMenuCard(
+                  context,
+                  'Master Inventory',
+                  Icons.inventory_2,
+                  Colors.deepPurple,
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const InventoryScreen()),
+                  ),
+                ),
+                const Expanded(child: SizedBox()), // Spacer for grid look
               ],
             ),
             const SizedBox(height: 25),

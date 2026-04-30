@@ -23,6 +23,11 @@ class FileHelper {
     return File('$path/quotations/$id.json');
   }
 
+  static Future<File> get _inventoryFile async {
+    final path = await _localPath;
+    return File('$path/inventory.json');
+  }
+
   static Future<void> saveSettings(CompanySettings settings) async {
     final file = await _settingsFile;
     await file.writeAsString(json.encode(settings.toJson()));
@@ -66,5 +71,24 @@ class FileHelper {
   static Future<void> deleteQuotation(String id) async {
     final file = await _quotationFile(id);
     if (await file.exists()) await file.delete();
+  }
+
+  static Future<void> saveInventory(List<QuotationItem> items) async {
+    final file = await _inventoryFile;
+    await file.writeAsString(json.encode(items.map((e) => e.toJson()).toList()));
+  }
+
+  static Future<List<QuotationItem>> loadInventory() async {
+    try {
+      final file = await _inventoryFile;
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        final List list = json.decode(content);
+        return list.map((e) => QuotationItem.fromJson(e)).toList();
+      }
+    } catch (e) {
+      print("Error loading inventory: $e");
+    }
+    return [];
   }
 }
