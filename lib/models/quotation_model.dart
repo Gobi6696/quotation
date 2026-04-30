@@ -172,7 +172,7 @@ class Quotation {
   final double additionalCostValue;
   final Map<String, String> additionalClientDetails;
   final Map<String, double> summaryExtras;
-  final DateTime? reminderDate;
+  final List<DateTime> reminderDates;
 
   Quotation({
     required this.id,
@@ -192,7 +192,7 @@ class Quotation {
     this.additionalCostValue = 0,
     this.additionalClientDetails = const {},
     this.summaryExtras = const {},
-    this.reminderDate,
+    this.reminderDates = const [],
   });
 
   double get subTotal => items.fold(0, (sum, item) => sum + item.totalValue);
@@ -243,7 +243,7 @@ class Quotation {
     'additionalCostValue': additionalCostValue,
     'additionalClientDetails': additionalClientDetails,
     'summaryExtras': summaryExtras,
-    'reminderDate': reminderDate?.toIso8601String(),
+    'reminderDates': reminderDates.map((e) => e.toIso8601String()).toList(),
   };
 
   factory Quotation.fromJson(Map<String, dynamic> json) => Quotation(
@@ -269,8 +269,10 @@ class Quotation {
     summaryExtras: (json['summaryExtras'] as Map? ?? {}).map<String, double>(
       (k, v) => MapEntry(k.toString(), (v as num? ?? 0).toDouble()),
     ),
-    reminderDate: json['reminderDate'] != null
-        ? DateTime.parse(json['reminderDate'])
-        : null,
+    reminderDates: json['reminderDates'] != null
+        ? (json['reminderDates'] as List).map((e) => DateTime.parse(e)).toList()
+        : (json['reminderDate'] != null
+            ? [DateTime.parse(json['reminderDate'])]
+            : []),
   );
 }

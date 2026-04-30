@@ -23,14 +23,14 @@ class _SplashScreenState extends State<SplashScreen> {
 
   _navigateToNext() async {
     await Future.delayed(const Duration(seconds: 3));
-    
+
     // Request notification permissions after splash delay
     await NotificationService().requestPermissions();
-    
+
     if (!mounted) return;
 
     final authController = Provider.of<AuthController>(context, listen: false);
-    
+
     // Check if user is already logged in (locally or firebase)
     if (authController.user != null || authController.localUserData != null) {
       Navigator.pushReplacement(
@@ -38,7 +38,6 @@ class _SplashScreenState extends State<SplashScreen> {
         MaterialPageRoute(builder: (context) => const DashboardScreen()),
       );
     } else {
-
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => const LoginScreen()),
@@ -64,17 +63,19 @@ class _SplashScreenState extends State<SplashScreen> {
             FadeInDown(
               duration: const Duration(seconds: 1),
               child: Container(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 2),
-
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.3),
+                    width: 2,
+                  ),
                 ),
-                child: const Icon(
-                  Icons.format_quote_rounded,
-                  size: 80,
-                  color: Colors.white,
+                child: Image.asset(
+                  'assets/images/app_logo.png',
+                  width: 80,
+                  height: 80,
                 ),
               ),
             ),

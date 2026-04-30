@@ -9,6 +9,7 @@ import 'package:uuid/uuid.dart';
 import '../../controllers/quotation_controller.dart';
 import '../../models/quotation_model.dart';
 import '../../utils/pdf_helper.dart';
+import '../../utils/excel_helper.dart';
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -35,7 +36,7 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
   TextEditingController? _gstValueController;
   TextEditingController? _additionalCostLabelController;
   TextEditingController? _additionalCostValueController;
-  DateTime? _reminderDate;
+  List<DateTime> _reminderDates = [];
 
   double _gstValue = 18.0;
   bool _isGstPercentage = true;
@@ -85,7 +86,7 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
       _showTransportation = widget.quotation!.showTransportation;
       _additionalCostLabel = widget.quotation!.additionalCostLabel;
       _additionalCostValue = widget.quotation!.additionalCostValue;
-      _reminderDate = widget.quotation!.reminderDate;
+      _reminderDates = List.from(widget.quotation!.reminderDates);
     } else {
       _id = const Uuid().v4();
       _quoteNoController = TextEditingController(
@@ -239,7 +240,7 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
           additionalCostValue: _additionalCostValue,
           additionalClientDetails: additionalClientDetails,
           summaryExtras: summaryExtras,
-          reminderDate: _reminderDate,
+          reminderDates: _reminderDates,
         );
 
         await context.read<QuotationController>().saveQuotation(quote);
@@ -261,22 +262,28 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
     }
   }
 
-  Future<void> _scheduleReminder() async {
+  Future<void> _scheduleReminder({int? editIndex}) async {
+    final DateTime? initialDate = editIndex != null
+        ? _reminderDates[editIndex]
+        : DateTime.now();
+
     final DateTime? pickedDate = await showDatePicker(
       context: context,
-      initialDate: DateTime.now(),
-      firstDate: DateTime.now(),
+      initialDate: initialDate!,
+      firstDate: DateTime.now().subtract(
+        const Duration(days: 30),
+      ), // Allow picking recent past if editing
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
 
     if (pickedDate != null) {
       final TimeOfDay? pickedTime = await showTimePicker(
         context: context,
-        initialTime: TimeOfDay.now(),
+        initialTime: TimeOfDay.fromDateTime(initialDate),
       );
 
       if (pickedTime != null) {
-        final DateTime scheduledDateTime = DateTime(
+        final DateTime manualDateTime = DateTime(
           pickedDate.year,
           pickedDate.month,
           pickedDate.day,
@@ -284,30 +291,79 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
           pickedTime.minute,
         );
 
-        if (scheduledDateTime.isBefore(DateTime.now())) {
+        if (manualDateTime.isBefore(DateTime.now()) && editIndex == null) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Please select a future time')),
           );
           return;
         }
 
-        await NotificationService().scheduleNotification(
-          id: _id.hashCode,
+        // Schedule 3 notifications for this specific follow-up date
+        final notificationService = NotificationService();
+        final String clientName = _clientNameController.text;
+        final String quoteNo = _quoteNoController.text;
+
+        // Base ID for this specific reminder entry
+        // If editing, we use the same base ID to overwrite.
+        // If adding, we use a new unique ID based on list length.
+        final int baseId =
+            _id.hashCode + (editIndex ?? _reminderDates.length) * 3;
+
+        // 1. Manual Time
+        await notificationService.scheduleNotification(
+          id: baseId,
           title: 'Quotation Follow-up',
-          body:
-              'Follow up with ${_clientNameController.text} for quote ${_quoteNoController.text}',
-          scheduledDate: scheduledDateTime,
+          body: 'Time to follow up with $clientName for quote $quoteNo',
+          scheduledDate: manualDateTime,
         );
 
+        // 2. Default Morning (9:00 AM)
+        final DateTime morningTime = DateTime(
+          pickedDate.year,
+          pickedDate.month,
+          pickedDate.day,
+          9,
+          0,
+        );
+        if (morningTime.isAfter(DateTime.now())) {
+          await notificationService.scheduleNotification(
+            id: baseId + 1,
+            title: 'Quotation Follow-up (Morning)',
+            body: 'Morning reminder for $clientName ($quoteNo)',
+            scheduledDate: morningTime,
+          );
+        }
+
+        // 3. Default Evening (5:00 PM)
+        final DateTime eveningTime = DateTime(
+          pickedDate.year,
+          pickedDate.month,
+          pickedDate.day,
+          17,
+          0,
+        );
+        if (eveningTime.isAfter(DateTime.now())) {
+          await notificationService.scheduleNotification(
+            id: baseId + 2,
+            title: 'Quotation Follow-up (Evening)',
+            body: 'Evening reminder for $clientName ($quoteNo)',
+            scheduledDate: eveningTime,
+          );
+        }
+
         setState(() {
-          _reminderDate = scheduledDateTime;
+          if (editIndex != null) {
+            _reminderDates[editIndex] = manualDateTime;
+          } else {
+            _reminderDates.add(manualDateTime);
+          }
         });
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Reminder set for ${DateFormat('MMM d, h:mm a').format(scheduledDateTime)}',
+                'Reminders set for ${DateFormat('MMM d, h:mm a').format(manualDateTime)}',
               ),
             ),
           );
@@ -369,7 +425,7 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
           additionalCostValue: _additionalCostValue,
           additionalClientDetails: additionalClientDetails,
           summaryExtras: summaryExtras,
-          reminderDate: _reminderDate,
+          reminderDates: _reminderDates,
         ),
         settings,
       );
@@ -396,6 +452,138 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
     }
   }
 
+  Future<void> _generateAndPreviewPdf() async {
+    final settings = context.read<QuotationController>().settings;
+    if (settings == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please set up Business Settings first')),
+      );
+      return;
+    }
+    setState(() => _isLoading = true);
+    try {
+      final Map<String, String> additionalClientDetails = {};
+      for (int i = 0; i < _clientDetailKeyControllers.length; i++) {
+        if (_clientDetailKeyControllers[i].text.isNotEmpty) {
+          additionalClientDetails[_clientDetailKeyControllers[i].text] =
+              _clientDetailValueControllers[i].text;
+        }
+      }
+
+      final Map<String, double> summaryExtras = {};
+      for (int i = 0; i < _summaryExtraKeyControllers.length; i++) {
+        if (_summaryExtraKeyControllers[i].text.isNotEmpty) {
+          summaryExtras[_summaryExtraKeyControllers[i].text] =
+              double.tryParse(_summaryExtraValueControllers[i].text) ?? 0;
+        }
+      }
+
+      final pdfData = await PdfHelper.generateQuotation(
+        Quotation(
+          id: _id,
+          quoteNumber: _quoteNoController.text,
+          clientName: _clientNameController.text,
+          clientAddress: _clientAddressController.text,
+          clientPhone: _clientPhoneController.text,
+          date: _selectedDate,
+          items: _items,
+          gstValue: _gstValue,
+          isGstPercentage: _isGstPercentage,
+          showGst: _showGst,
+          transportationValue: _transportation,
+          isTransportationPercentage: _isTransportationPercentage,
+          showTransportation: _showTransportation,
+          additionalCostLabel: _additionalCostLabelController?.text ?? "",
+          additionalCostValue: _additionalCostValue,
+          additionalClientDetails: additionalClientDetails,
+          summaryExtras: summaryExtras,
+          reminderDates: _reminderDates,
+        ),
+        settings,
+      );
+      await Printing.layoutPdf(onLayout: (_) => pdfData);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error generating PDF: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _shareQuotationExcel() async {
+    if (_items.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add at least one item')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      final Map<String, String> additionalClientDetails = {};
+      for (int i = 0; i < _clientDetailKeyControllers.length; i++) {
+        if (_clientDetailKeyControllers[i].text.isNotEmpty) {
+          additionalClientDetails[_clientDetailKeyControllers[i].text] =
+              _clientDetailValueControllers[i].text;
+        }
+      }
+
+      final Map<String, double> summaryExtras = {};
+      for (int i = 0; i < _summaryExtraKeyControllers.length; i++) {
+        if (_summaryExtraKeyControllers[i].text.isNotEmpty) {
+          summaryExtras[_summaryExtraKeyControllers[i].text] =
+              double.tryParse(_summaryExtraValueControllers[i].text) ?? 0;
+        }
+      }
+
+      final excelData = await ExcelHelper.generateQuotationExcel(
+        Quotation(
+          id: _id,
+          quoteNumber: _quoteNoController.text,
+          clientName: _clientNameController.text,
+          clientAddress: _clientAddressController.text,
+          clientPhone: _clientPhoneController.text,
+          date: _selectedDate,
+          items: _items,
+          gstValue: _gstValue,
+          isGstPercentage: _isGstPercentage,
+          showGst: _showGst,
+          transportationValue: _transportation,
+          isTransportationPercentage: _isTransportationPercentage,
+          showTransportation: _showTransportation,
+          additionalCostLabel: _additionalCostLabelController?.text ?? "",
+          additionalCostValue: _additionalCostValue,
+          additionalClientDetails: additionalClientDetails,
+          summaryExtras: summaryExtras,
+          reminderDates: _reminderDates,
+        ),
+      );
+
+      final tempDir = await getTemporaryDirectory();
+      final filePath =
+          "${tempDir.path}/${_quoteNoController.text.replaceAll('/', '_')}.xlsx";
+      final file = File(filePath);
+      await file.writeAsBytes(excelData);
+
+      await Share.shareXFiles(
+        [XFile(filePath)],
+        text: 'Quotation Excel for ${_clientNameController.text}',
+        subject: 'Quotation ${_quoteNoController.text}',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error sharing Excel: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -407,93 +595,9 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.picture_as_pdf, color: Colors.redAccent),
-            onPressed: (_items.isEmpty || _isLoading)
-                ? null
-                : () async {
-                    final settings = context
-                        .read<QuotationController>()
-                        .settings;
-                    if (settings == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Please set up Business Settings first',
-                          ),
-                        ),
-                      );
-                      return;
-                    }
-                    setState(() => _isLoading = true);
-                    try {
-                      final Map<String, String> additionalClientDetails = {};
-                      for (
-                        int i = 0;
-                        i < _clientDetailKeyControllers.length;
-                        i++
-                      ) {
-                        if (_clientDetailKeyControllers[i].text.isNotEmpty) {
-                          additionalClientDetails[_clientDetailKeyControllers[i]
-                                  .text] =
-                              _clientDetailValueControllers[i].text;
-                        }
-                      }
-
-                      final Map<String, double> summaryExtras = {};
-                      for (
-                        int i = 0;
-                        i < _summaryExtraKeyControllers.length;
-                        i++
-                      ) {
-                        if (_summaryExtraKeyControllers[i].text.isNotEmpty) {
-                          summaryExtras[_summaryExtraKeyControllers[i].text] =
-                              double.tryParse(
-                                _summaryExtraValueControllers[i].text,
-                              ) ??
-                              0;
-                        }
-                      }
-
-                      final pdfData = await PdfHelper.generateQuotation(
-                        Quotation(
-                          id: _id,
-                          quoteNumber: _quoteNoController.text,
-                          clientName: _clientNameController.text,
-                          clientAddress: _clientAddressController.text,
-                          clientPhone: _clientPhoneController.text,
-                          date: _selectedDate,
-                          items: _items,
-                          gstValue: _gstValue,
-                          isGstPercentage: _isGstPercentage,
-                          showGst: _showGst,
-                          transportationValue: _transportation,
-                          isTransportationPercentage:
-                              _isTransportationPercentage,
-                          showTransportation: _showTransportation,
-                          additionalCostLabel:
-                              _additionalCostLabelController?.text ?? "",
-                          additionalCostValue: _additionalCostValue,
-                          additionalClientDetails: additionalClientDetails,
-                          summaryExtras: summaryExtras,
-                          reminderDate: _reminderDate,
-                        ),
-                        settings,
-                      );
-                      await Printing.layoutPdf(onLayout: (_) => pdfData);
-                    } catch (e) {
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Error generating PDF: $e')),
-                        );
-                      }
-                    } finally {
-                      if (mounted) setState(() => _isLoading = false);
-                    }
-                  },
-          ),
-          IconButton(
             icon: const Icon(Icons.save, color: Color(0xFF6A11CB)),
             onPressed: _isLoading ? null : _saveQuote,
+            tooltip: 'Save Quotation',
           ),
         ],
       ),
@@ -664,75 +768,93 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
   }
 
   Widget _buildItemCard(int index, QuotationItem item) {
-    return Dismissible(
-      key: Key(item.id),
-      onDismissed: (_) {
-        setState(() => _items.removeAt(index));
-      },
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        color: Colors.redAccent,
-        child: const Icon(Icons.delete, color: Colors.white),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(15),
-            boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 5)],
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 5)],
+        ),
+        child: ListTile(
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 15,
+            vertical: 5,
           ),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 15,
-              vertical: 5,
-            ),
-            onTap: () => _editItem(index),
-            leading: item.images.isNotEmpty
-                ? ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.file(
-                      File(item.images.first),
-                      width: 50,
-                      height: 50,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        width: 50,
-                        height: 50,
-                        color: Colors.grey[200],
-                        child: const Icon(Icons.broken_image),
-                      ),
-                    ),
-                  )
-                : Container(
+          onTap: () => _editItem(index),
+          leading: item.images.isNotEmpty
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.file(
+                    File(item.images.first),
                     width: 50,
                     height: 50,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(Icons.image_not_supported),
+                    fit: BoxFit.cover,
                   ),
-            title: Text(
-              item.displayName,
-              style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
-            ),
-            subtitle: Text(
-              item.basicInfo.entries
-                  .where((e) => e.key.toLowerCase() != 'description')
-                  .map((e) => "${e.key}: ${e.value}")
-                  .take(2)
-                  .join(" | "),
-            ),
-            trailing: Text(
-              "₹${item.totalValue.toStringAsFixed(2)}",
-              style: GoogleFonts.poppins(
-                fontWeight: FontWeight.bold,
-                color: const Color(0xFF6A11CB),
+                )
+              : Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.image_not_supported),
+                ),
+          title: Text(
+            item.displayName,
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+          ),
+          subtitle: Text(
+            item.basicInfo.entries
+                .where((e) => e.key.toLowerCase() != 'description')
+                .map((e) => "${e.key}: ${e.value}")
+                .take(2)
+                .join(" | "),
+          ),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "₹${item.totalValue.toStringAsFixed(2)}",
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.bold,
+                  color: const Color(0xFF6A11CB),
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Delete Item'),
+                      content: const Text(
+                        'Are you sure you want to delete this item?',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            setState(() => _items.removeAt(index));
+                            Navigator.pop(context);
+                          },
+                          child: const Text(
+                            'Delete',
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
         ),
       ),
@@ -940,15 +1062,111 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
             ],
           ),
           const SizedBox(height: 20),
+          const SizedBox(height: 25),
+          Row(
+            children: [
+              Expanded(
+                child: _buildActionButton(
+                  'PDF',
+                  Icons.picture_as_pdf,
+                  Colors.redAccent,
+                  _items.isEmpty || _isLoading ? null : _generateAndPreviewPdf,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildActionButton(
+                  'Excel',
+                  Icons.table_chart,
+                  Colors.green,
+                  _items.isEmpty || _isLoading ? null : _shareQuotationExcel,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildActionButton(
+                  'Save',
+                  Icons.save,
+                  const Color(0xFF6A11CB),
+                  _isLoading ? null : _saveQuote,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+
+          // Multi-Reminder List
+          if (_reminderDates.isNotEmpty) ...[
+            Text(
+              "Follow-up Reminders",
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 5),
+            ..._reminderDates.asMap().entries.map((entry) {
+              final idx = entry.key;
+              final date = entry.value;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurple.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.deepPurple.withOpacity(0.1)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.notifications_active,
+                      size: 16,
+                      color: Color(0xFF6A11CB),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        DateFormat('MMM d, yyyy - h:mm a').format(date),
+                        style: GoogleFonts.poppins(fontSize: 12),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.edit,
+                        size: 18,
+                        color: Colors.blue,
+                      ),
+                      onPressed: () => _scheduleReminder(editIndex: idx),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.delete,
+                        size: 18,
+                        color: Colors.red,
+                      ),
+                      onPressed: () {
+                        setState(() => _reminderDates.removeAt(idx));
+                      },
+                    ),
+                  ],
+                ),
+              );
+            }),
+            const SizedBox(height: 10),
+          ],
+
           SizedBox(
             width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _isLoading ? null : _scheduleReminder,
-              icon: const Icon(Icons.notifications_active),
-              label: const Text("Notify Me"),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6A11CB),
-                foregroundColor: Colors.white,
+            child: OutlinedButton.icon(
+              onPressed: _isLoading ? null : () => _scheduleReminder(),
+              icon: const Icon(Icons.notification_add_outlined),
+              label: const Text("Add Follow-up Reminder"),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF6A11CB),
+                side: const BorderSide(color: Color(0xFF6A11CB)),
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -959,13 +1177,57 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
           const SizedBox(height: 10),
           SizedBox(
             width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _isLoading ? null : _shareQuotation,
+            child: ElevatedButton.icon(
+              onPressed: _isLoading
+                  ? null
+                  : () {
+                      showModalBottomSheet(
+                        context: context,
+                        builder: (context) => Container(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Share Quotation',
+                                style: GoogleFonts.poppins(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+                              ListTile(
+                                leading: const Icon(
+                                  Icons.picture_as_pdf,
+                                  color: Colors.red,
+                                ),
+                                title: const Text('Share as PDF'),
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  _shareQuotation();
+                                },
+                              ),
+                              ListTile(
+                                leading: const Icon(
+                                  Icons.table_chart,
+                                  color: Colors.green,
+                                ),
+                                title: const Text('Share as Excel'),
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  _shareQuotationExcel();
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
               icon: const Icon(Icons.share),
               label: const Text("Share to WhatsApp"),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF25D366),
-                side: const BorderSide(color: Color(0xFF25D366)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF25D366),
+                foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -1039,6 +1301,29 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton(
+    String label,
+    IconData icon,
+    Color color,
+    VoidCallback? onTap,
+  ) {
+    return ElevatedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 18),
+      label: Text(
+        label,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+      ),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        elevation: 2,
       ),
     );
   }

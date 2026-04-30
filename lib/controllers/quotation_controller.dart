@@ -148,13 +148,17 @@ class QuotationController with ChangeNotifier {
 
   void _scheduleAllReminders() {
     for (var q in _quotations) {
-      if (q.reminderDate != null && q.reminderDate!.isAfter(DateTime.now())) {
-        NotificationService().scheduleNotification(
-          id: q.id.hashCode,
-          title: 'Quotation Follow-up',
-          body: 'Follow up with ${q.clientName} for quote ${q.quoteNumber}',
-          scheduledDate: q.reminderDate!,
-        );
+      for (int i = 0; i < q.reminderDates.length; i++) {
+        final date = q.reminderDates[i];
+        if (date.isAfter(DateTime.now())) {
+          // Use a combination of quote hash and index to keep IDs unique
+          NotificationService().scheduleNotification(
+            id: q.id.hashCode + i * 1000,
+            title: 'Quotation Follow-up',
+            body: 'Follow up with ${q.clientName} for quote ${q.quoteNumber}',
+            scheduledDate: date,
+          );
+        }
       }
     }
   }
