@@ -23,6 +23,13 @@ class FileHelper {
     return File('$path/quotations/$id.json');
   }
 
+  static Future<File> _billFile(String id) async {
+    final path = await _localPath;
+    final dir = Directory('$path/bills');
+    if (!await dir.exists()) await dir.create();
+    return File('$path/bills/$id.json');
+  }
+
   static Future<File> get _inventoryFile async {
     final path = await _localPath;
     return File('$path/inventory.json');
@@ -73,9 +80,38 @@ class FileHelper {
     if (await file.exists()) await file.delete();
   }
 
+  static Future<void> saveBill(Quotation bill) async {
+    final file = await _billFile(bill.id);
+    await file.writeAsString(json.encode(bill.toJson()));
+  }
+
+  static Future<List<Quotation>> getAllBills() async {
+    final path = await _localPath;
+    final dir = Directory('$path/bills');
+    if (!await dir.exists()) return [];
+
+    List<Quotation> bills = [];
+    final files = dir.listSync();
+    for (var f in files) {
+      if (f is File && f.path.endsWith('.json')) {
+        final content = await f.readAsString();
+        bills.add(Quotation.fromJson(json.decode(content)));
+      }
+    }
+    bills.sort((a, b) => b.date.compareTo(a.date));
+    return bills;
+  }
+
+  static Future<void> deleteBill(String id) async {
+    final file = await _billFile(id);
+    if (await file.exists()) await file.delete();
+  }
+
   static Future<void> saveInventory(List<QuotationItem> items) async {
     final file = await _inventoryFile;
-    await file.writeAsString(json.encode(items.map((e) => e.toJson()).toList()));
+    await file.writeAsString(
+      json.encode(items.map((e) => e.toJson()).toList()),
+    );
   }
 
   static Future<List<QuotationItem>> loadInventory() async {

@@ -12,11 +12,13 @@ class QuotationController with ChangeNotifier {
   
   CompanySettings? _settings;
   List<Quotation> _quotations = [];
+  List<Quotation> _bills = [];
   Map<String, dynamic> _driveDataCache = {};
   bool _isLoading = false;
 
   CompanySettings? get settings => _settings;
   List<Quotation> get quotations => _quotations;
+  List<Quotation> get bills => _bills;
   bool get isLoading => _isLoading;
 
   QuotationController(this.authController) {
@@ -42,9 +44,10 @@ class QuotationController with ChangeNotifier {
     
     _settings = await FileHelper.loadSettings();
     _quotations = await FileHelper.getAllQuotations();
+    _bills = await FileHelper.getAllBills();
     
     // If local data is empty, try to sync from Drive
-    if (_quotations.isEmpty && authController.user != null) {
+    if (_quotations.isEmpty && _bills.isEmpty && authController.user != null) {
       await syncWithDrive();
     }
     _isLoading = false;
@@ -61,9 +64,11 @@ class QuotationController with ChangeNotifier {
     try {
       final driveDataRaw = await DriveHelper.downloadUserData(authController.googleSignIn);
       if (driveDataRaw != null) {
-        _driveDataCache = Map<String, dynamic>.from(driveDataRaw);
-        // Process Media
+        // Process Media (converts Base64 to local paths)
         final driveData = await MediaSyncHelper.processAfterDownload(driveDataRaw);
+        
+        // Update cache with processed data (local paths instead of massive Base64)
+        _driveDataCache = Map<String, dynamic>.from(driveData);
         
         // Restore Settings
         if (driveData.containsKey('settings')) {
@@ -84,6 +89,21 @@ class QuotationController with ChangeNotifier {
             await FileHelper.saveQuotation(q);
           }
           _quotations = restoredQuotes;
+        }
+
+        // Restore Bills
+        final List<Quotation> restoredBills = [];
+        driveData.forEach((key, value) {
+          if (key.startsWith('bill_')) {
+            restoredBills.add(Quotation.fromJson(value));
+          }
+        });
+
+        if (restoredBills.isNotEmpty) {
+          for (var b in restoredBills) {
+            await FileHelper.saveBill(b);
+          }
+          _bills = restoredBills;
         }
       }
     } catch (e) {
@@ -136,6 +156,43 @@ class QuotationController with ChangeNotifier {
 
     if (authController.user != null) {
       _driveDataCache.remove('quotation_$id');
+      try {
+        final driveData = await MediaSyncHelper.prepareForUpload(_driveDataCache);
+        await DriveHelper.uploadUserData(authController.googleSignIn, driveData);
+      } catch (e) {
+        print("Error updating Drive after deletion: $e");
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<void> saveBill(Quotation bill) async {
+    await FileHelper.saveBill(bill);
+    
+    final index = _bills.indexWhere((b) => b.id == bill.id);
+    if (index != -1) {
+      _bills[index] = bill;
+    } else {
+      _bills.add(bill);
+    }
+
+    if (authController.user != null) {
+      _driveDataCache['bill_${bill.id}'] = bill.toJson();
+      
+      // Process for upload
+      final driveData = await MediaSyncHelper.prepareForUpload(_driveDataCache);
+      await DriveHelper.uploadUserData(authController.googleSignIn, driveData);
+    }
+
+    notifyListeners();
+  }
+
+  Future<void> deleteBill(String id) async {
+    await FileHelper.deleteBill(id);
+    _bills.removeWhere((b) => b.id == id);
+
+    if (authController.user != null) {
+      _driveDataCache.remove('bill_$id');
       try {
         final driveData = await MediaSyncHelper.prepareForUpload(_driveDataCache);
         await DriveHelper.uploadUserData(authController.googleSignIn, driveData);

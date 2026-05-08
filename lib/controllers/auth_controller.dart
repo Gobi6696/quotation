@@ -10,7 +10,6 @@ class AuthController with ChangeNotifier {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email', 'https://www.googleapis.com/auth/drive.appdata'],
   );
-
   GoogleSignIn get googleSignIn => _googleSignIn;
 
   User? _user;

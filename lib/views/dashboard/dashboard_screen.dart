@@ -200,7 +200,14 @@ class DashboardScreen extends StatelessWidget {
                     MaterialPageRoute(builder: (context) => const InventoryScreen()),
                   ),
                 ),
-                const Expanded(child: SizedBox()), // Spacer for grid look
+                const SizedBox(width: 15),
+                _buildMenuCard(
+                  context,
+                  'Bill History',
+                  Icons.receipt_long,
+                  Colors.teal,
+                  () => _showBillHistoryBottomSheet(context, quoteController),
+                ),
               ],
             ),
             const SizedBox(height: 25),
@@ -510,6 +517,138 @@ class DashboardScreen extends StatelessWidget {
                                     MaterialPageRoute(
                                       builder: (context) =>
                                           QuotationEditorScreen(quotation: q),
+                                    ),
+                                  );
+                                },
+                              ),
+                            );
+                          },
+                        );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showBillHistoryBottomSheet(
+    BuildContext context,
+    QuotationController controller,
+  ) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+      ),
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.8,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Text(
+              'Bill History',
+              style: GoogleFonts.poppins(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const Divider(),
+            Expanded(
+              child: Consumer<QuotationController>(
+                builder: (context, quoteController, _) {
+                  return quoteController.bills.isEmpty
+                      ? Center(
+                          child: Text(
+                            'No bills found',
+                            style: GoogleFonts.poppins(color: Colors.grey),
+                          ),
+                        )
+                      : ListView.builder(
+                          itemCount: quoteController.bills.length,
+                          itemBuilder: (context, i) {
+                            final b = quoteController.bills[i];
+                            return Dismissible(
+                              key: Key(b.id),
+                              direction: DismissDirection.endToStart,
+                              background: Container(
+                                alignment: Alignment.centerRight,
+                                padding: const EdgeInsets.only(right: 20),
+                                color: Colors.red,
+                                child: const Icon(Icons.delete,
+                                    color: Colors.white),
+                              ),
+                              confirmDismiss: (direction) async {
+                                return await showDialog(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: Text(
+                                      'Delete Bill',
+                                      style: GoogleFonts.poppins(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    content: Text(
+                                      'Are you sure you want to delete this bill? This will also remove it from Google Drive.',
+                                      style: GoogleFonts.poppins(),
+                                    ),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, false),
+                                        child: Text(
+                                          'Cancel',
+                                          style: GoogleFonts.poppins(
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                      ),
+                                      TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(context, true),
+                                        child: Text(
+                                          'Delete',
+                                          style: GoogleFonts.poppins(
+                                            color: Colors.red,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                              onDismissed: (direction) async {
+                                await quoteController.deleteBill(b.id);
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Bill deleted')),
+                                  );
+                                }
+                              },
+                              child: ListTile(
+                                title: Text(
+                                  b.clientName,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold),
+                                ),
+                                subtitle: Text(b.quoteNumber),
+                                trailing: Text(
+                                  '₹${b.grandTotal.toStringAsFixed(2)}',
+                                  style: const TextStyle(
+                                    color: Colors.teal,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          QuotationEditorScreen(quotation: b),
                                     ),
                                   );
                                 },

@@ -37,6 +37,7 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
   TextEditingController? _gstValueController;
   TextEditingController? _additionalCostLabelController;
   TextEditingController? _additionalCostValueController;
+  late TextEditingController _adjustmentController;
   List<DateTime> _reminderDates = [];
 
   double _gstValue = 18.0;
@@ -88,6 +89,9 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
       _additionalCostLabel = widget.quotation!.additionalCostLabel;
       _additionalCostValue = widget.quotation!.additionalCostValue;
       _reminderDates = List.from(widget.quotation!.reminderDates);
+      _adjustmentController = TextEditingController(
+        text: widget.quotation!.adjustment.toString(),
+      );
     } else {
       _id = const Uuid().v4();
       _quoteNoController = TextEditingController(
@@ -98,6 +102,7 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
       _clientPhoneController = TextEditingController();
       _selectedDate = DateTime.now();
       _items = [];
+      _adjustmentController = TextEditingController(text: "0");
     }
     _transportationController = TextEditingController(
       text: _transportation.toString(),
@@ -132,6 +137,7 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
     for (var c in _clientDetailValueControllers) c.dispose();
     for (var c in _summaryExtraKeyControllers) c.dispose();
     for (var c in _summaryExtraValueControllers) c.dispose();
+    _adjustmentController.dispose();
     super.dispose();
   }
 
@@ -168,7 +174,8 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
       _transportationAmount +
       _additionalCostValue +
       _totalSummaryExtras +
-      _gstAmount;
+      _gstAmount +
+      (double.tryParse(_adjustmentController.text) ?? 0);
 
   void _addItem() {
     setState(() {
@@ -242,12 +249,25 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
           additionalClientDetails: additionalClientDetails,
           summaryExtras: summaryExtras,
           reminderDates: _reminderDates,
+          isBill: widget.quotation?.isBill ?? false,
+          adjustment: double.tryParse(_adjustmentController.text) ?? 0,
         );
 
-        await context.read<QuotationController>().saveQuotation(quote);
+        if (quote.isBill) {
+          await context.read<QuotationController>().saveBill(quote);
+        } else {
+          await context.read<QuotationController>().saveQuotation(quote);
+        }
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Quotation saved and synced')),
+            SnackBar(
+              content: Text(
+                quote.isBill
+                    ? 'Bill saved and synced'
+                    : 'Quotation saved and synced',
+              ),
+            ),
           );
           Navigator.pop(context);
         }
@@ -427,6 +447,8 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
           additionalClientDetails: additionalClientDetails,
           summaryExtras: summaryExtras,
           reminderDates: _reminderDates,
+          isBill: widget.quotation?.isBill ?? false,
+          adjustment: double.tryParse(_adjustmentController.text) ?? 0,
         ),
         settings,
       );
@@ -499,6 +521,8 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
           additionalClientDetails: additionalClientDetails,
           summaryExtras: summaryExtras,
           reminderDates: _reminderDates,
+          isBill: widget.quotation?.isBill ?? false,
+          adjustment: double.tryParse(_adjustmentController.text) ?? 0,
         ),
         settings,
       );
@@ -560,6 +584,8 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
           additionalClientDetails: additionalClientDetails,
           summaryExtras: summaryExtras,
           reminderDates: _reminderDates,
+          isBill: widget.quotation?.isBill ?? false,
+          adjustment: double.tryParse(_adjustmentController.text) ?? 0,
         ),
       );
 
@@ -585,18 +611,74 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
     }
   }
 
+  void _convertToBill() {
+    if (widget.quotation == null) return;
+
+    // Create a copy of items and store their current state as originalData
+    final billItems = _items.map((item) {
+      final newItem = item.copy();
+      // Store a snapshot without previous originalData to avoid recursive nesting
+      final snapshot = item.toJson();
+      snapshot.remove('originalData');
+      newItem.originalData = snapshot;
+      return newItem;
+    }).toList();
+
+    final bill = Quotation(
+      id: const Uuid().v4(), // New ID for Bill
+      quoteNumber: "BILL-${_quoteNoController.text}",
+      clientName: _clientNameController.text,
+      clientAddress: _clientAddressController.text,
+      clientPhone: _clientPhoneController.text,
+      date: DateTime.now(),
+      items: billItems,
+      gstValue: _gstValue,
+      isGstPercentage: _isGstPercentage,
+      showGst: _showGst,
+      transportationValue: _transportation,
+      isTransportationPercentage: _isTransportationPercentage,
+      showTransportation: _showTransportation,
+      additionalCostLabel: _additionalCostLabel,
+      additionalCostValue: _additionalCostValue,
+      additionalClientDetails: widget.quotation!.additionalClientDetails,
+      summaryExtras: widget.quotation!.summaryExtras,
+      reminderDates: _reminderDates,
+      isBill: true,
+    );
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => QuotationEditorScreen(quotation: bill),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FD),
       appBar: AppBar(
         title: Text(
-          widget.quotation == null ? 'New Quotation' : 'Edit Quotation',
+          widget.quotation == null
+              ? 'New Quotation'
+              : (widget.quotation!.isBill ? 'Edit Bill' : 'Edit Quotation'),
           style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
         ),
         actions: [
+          if (widget.quotation != null && !widget.quotation!.isBill)
+            IconButton(
+              icon: const Icon(Icons.receipt, color: Colors.teal),
+              tooltip: 'Convert to Bill',
+              onPressed: _convertToBill,
+            ),
           IconButton(
-            icon: const Icon(Icons.save, color: Color(0xFF6A11CB)),
+            icon: Icon(
+              Icons.save,
+              color: widget.quotation?.isBill == true
+                  ? Colors.teal
+                  : const Color(0xFF6A11CB),
+            ),
             onPressed: _isLoading ? null : _saveQuote,
             tooltip: 'Save Quotation',
           ),
@@ -837,6 +919,48 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
                   ),
                 ],
               ),
+              if (item.originalData != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.withOpacity(0.2)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.info_outline,
+                        size: 14,
+                        color: Colors.orange,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          () {
+                            final orig = QuotationItem.fromJson(
+                              item.originalData!,
+                            );
+                            String sizeStr = orig.isUnitBased
+                                ? "${orig.unitQuantity} ${orig.itemUnit}"
+                                : "${orig.width}x${orig.height} ${orig.areaUnit}";
+                            return "Quoted Ref: $sizeStr | Total: ₹${orig.totalValue.toStringAsFixed(2)}";
+                          }(),
+                          style: GoogleFonts.poppins(
+                            fontSize: 11,
+                            color: Colors.orange[800],
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const Divider(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1178,15 +1302,111 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
           }),
           if (_showGst) _summaryRow("GST Amount", _gstAmount, isSmall: true),
 
+          if (widget.quotation?.isBill == true) ...[
+            const Divider(height: 30),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    "Bill Adjustment (±)",
+                    style: GoogleFonts.poppins(
+                      color: Colors.teal,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 120,
+                  child: TextField(
+                    controller: _adjustmentController,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      signed: true,
+                    ),
+                    textAlign: TextAlign.end,
+                    decoration: const InputDecoration(
+                      prefixText: "₹ ",
+                      hintText: "0.00",
+                    ),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            // Show original grand total as reference if it's a bill
+            Builder(
+              builder: (context) {
+                double originalGrandTotal = 0;
+                try {
+                  // This is a bit heavy but accurate
+                  final List<QuotationItem> originalItems = _items.map((item) {
+                    if (item.originalData != null) {
+                      return QuotationItem.fromJson(item.originalData!);
+                    }
+                    return item;
+                  }).toList();
+
+                  // Create a temporary quotation to calculate its grand total
+                  final tempQuote = Quotation(
+                    id: 'temp',
+                    quoteNumber: '',
+                    clientName: '',
+                    clientAddress: '',
+                    clientPhone: '',
+                    date: DateTime.now(),
+                    items: originalItems,
+                    gstValue: widget.quotation?.gstValue ?? 18.0,
+                    isGstPercentage: widget.quotation?.isGstPercentage ?? true,
+                    showGst: widget.quotation?.showGst ?? true,
+                    transportationValue:
+                        widget.quotation?.transportationValue ?? 0,
+                    isTransportationPercentage:
+                        widget.quotation?.isTransportationPercentage ?? false,
+                    showTransportation:
+                        widget.quotation?.showTransportation ?? true,
+                    additionalCostValue:
+                        widget.quotation?.additionalCostValue ?? 0,
+                    summaryExtras: widget.quotation?.summaryExtras ?? {},
+                    adjustment: 0,
+                  );
+                  originalGrandTotal = tempQuote.grandTotal;
+                } catch (e) {}
+
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      "Original Total",
+                      style: GoogleFonts.poppins(
+                        color: Colors.grey,
+                        fontSize: 12,
+                      ),
+                    ),
+                    Text(
+                      "₹${originalGrandTotal.toStringAsFixed(2)}",
+                      style: GoogleFonts.poppins(
+                        color: Colors.grey,
+                        fontSize: 12,
+                        decoration: TextDecoration.lineThrough,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
           const Divider(height: 30),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                "Grand Total",
+                widget.quotation?.isBill == true
+                    ? "Final Bill Amount"
+                    : "Grand Total",
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
+                  color: widget.quotation?.isBill == true ? Colors.teal : null,
                 ),
               ),
               Text(
@@ -1194,7 +1414,9 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
                 style: GoogleFonts.poppins(
                   fontWeight: FontWeight.bold,
                   fontSize: 18,
-                  color: const Color(0xFF6A11CB),
+                  color: widget.quotation?.isBill == true
+                      ? Colors.teal
+                      : const Color(0xFF6A11CB),
                 ),
               ),
             ],
@@ -1866,6 +2088,71 @@ class _AdvancedItemEditorState extends State<AdvancedItemEditor>
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
+          if (_editingItem.originalData != null) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.shade200),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.history, size: 16, color: Colors.orange),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Original Quoted Values',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange.shade900,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  () {
+                    final orig = QuotationItem.fromJson(
+                      _editingItem.originalData!,
+                    );
+                    return Column(
+                      children: [
+                        _originalRow(
+                          'Pricing Mode',
+                          orig.isUnitBased ? 'Unit Based' : 'Area Based',
+                        ),
+                        if (orig.isUnitBased) ...[
+                          _originalRow('Unit Price', '₹${orig.unitRate}'),
+                          _originalRow(
+                            'Quantity',
+                            '${orig.unitQuantity} ${orig.itemUnit}',
+                          ),
+                        ] else ...[
+                          _originalRow(
+                            'Size',
+                            '${orig.width} x ${orig.height} ${orig.areaUnit}',
+                          ),
+                          _originalRow('Rate', '₹${orig.ratePerSqFt}'),
+                          _originalRow('Quantity', '${orig.quantity} Pcs'),
+                        ],
+                        const Divider(height: 15),
+                        _originalRow(
+                          'Quoted Total',
+                          '₹${orig.totalValue.toStringAsFixed(2)}',
+                          isBold: true,
+                        ),
+                      ],
+                    );
+                  }(),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
           _buildModeToggle(
             label: 'Pricing Mode',
             value: _editingItem.isUnitBased,
@@ -2451,6 +2738,32 @@ class _AdvancedItemEditorState extends State<AdvancedItemEditor>
           filled: true,
           fillColor: Colors.white,
         ),
+      ),
+    );
+  }
+
+  Widget _originalRow(String label, String value, {bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              color: Colors.orange.shade800,
+            ),
+          ),
+          Text(
+            value,
+            style: GoogleFonts.poppins(
+              fontSize: 12,
+              fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+              color: Colors.orange.shade900,
+            ),
+          ),
+        ],
       ),
     );
   }

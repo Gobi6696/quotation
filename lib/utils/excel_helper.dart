@@ -47,7 +47,7 @@ class ExcelHelper {
     // 1. Title
     final Range titleRange = sheet.getRangeByName('A1:K1');
     titleRange.merge();
-    titleRange.setText('BUSINESS QUOTATION');
+    titleRange.setText(quote.isBill ? 'FINAL BILL' : 'BUSINESS QUOTATION');
     titleRange.cellStyle = headerStyle;
     sheet.setRowHeightInPixels(1, 40);
 

@@ -24,6 +24,7 @@ class QuotationItem {
   Map<String, double> extras;
   Map<String, String> basicInfo;
   Map<String, String> specs;
+  Map<String, dynamic>? originalData;
 
   QuotationItem({
     String? id,
@@ -43,6 +44,7 @@ class QuotationItem {
     Map<String, double>? extras,
     Map<String, String>? basicInfo,
     Map<String, String>? specs,
+    this.originalData,
   }) : id = id ?? const Uuid().v4(),
        images = images ?? [],
        accessories = accessories ?? {},
@@ -92,6 +94,7 @@ class QuotationItem {
     'extras': extras,
     'basicInfo': basicInfo,
     'specs': specs,
+    'originalData': originalData,
   };
 
   factory QuotationItem.fromJson(Map<String, dynamic> json) {
@@ -166,6 +169,7 @@ class QuotationItem {
       ),
       basicInfo: migratedBasic,
       specs: migratedSpecs,
+      originalData: json['originalData'],
     );
   }
 
@@ -188,6 +192,7 @@ class QuotationItem {
       extras: Map.from(extras),
       basicInfo: Map.from(basicInfo),
       specs: Map.from(specs),
+      originalData: originalData != null ? Map.from(originalData!) : null,
     );
   }
 }
@@ -214,6 +219,8 @@ class Quotation {
   final Map<String, String> additionalClientDetails;
   final Map<String, double> summaryExtras;
   final List<DateTime> reminderDates;
+  final bool isBill;
+  final double adjustment;
 
   Quotation({
     required this.id,
@@ -234,6 +241,8 @@ class Quotation {
     this.additionalClientDetails = const {},
     this.summaryExtras = const {},
     this.reminderDates = const [],
+    this.isBill = false,
+    this.adjustment = 0,
   });
 
   double get subTotal => items.fold(0, (sum, item) => sum + item.totalValue);
@@ -264,7 +273,8 @@ class Quotation {
       transportationAmount +
       additionalCostValue +
       totalSummaryExtras +
-      gstAmount;
+      gstAmount +
+      adjustment;
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -285,6 +295,8 @@ class Quotation {
     'additionalClientDetails': additionalClientDetails,
     'summaryExtras': summaryExtras,
     'reminderDates': reminderDates.map((e) => e.toIso8601String()).toList(),
+    'isBill': isBill,
+    'adjustment': adjustment,
   };
 
   factory Quotation.fromJson(Map<String, dynamic> json) => Quotation(
@@ -315,5 +327,7 @@ class Quotation {
         : (json['reminderDate'] != null
               ? [DateTime.parse(json['reminderDate'])]
               : []),
+    isBill: json['isBill'] ?? false,
+    adjustment: (json['adjustment'] as num? ?? 0).toDouble(),
   );
 }
