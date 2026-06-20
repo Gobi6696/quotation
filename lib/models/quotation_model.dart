@@ -197,6 +197,34 @@ class QuotationItem {
   }
 }
 
+class WorkLog {
+  final String id;
+  final String employeeName;
+  final DateTime date;
+  final List<String> images;
+
+  WorkLog({
+    required this.id,
+    required this.employeeName,
+    required this.date,
+    required this.images,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'employeeName': employeeName,
+    'date': date.toIso8601String(),
+    'images': images,
+  };
+
+  factory WorkLog.fromJson(Map<String, dynamic> json) => WorkLog(
+    id: json['id'] ?? '',
+    employeeName: json['employeeName'] ?? '',
+    date: json['date'] != null ? DateTime.parse(json['date']) : DateTime.now(),
+    images: List<String>.from(json['images'] ?? []),
+  );
+}
+
 class Quotation {
   final String id;
   final String quoteNumber;
@@ -221,6 +249,7 @@ class Quotation {
   final List<DateTime> reminderDates;
   final bool isBill;
   final double adjustment;
+  final List<WorkLog> workLogs;
 
   Quotation({
     required this.id,
@@ -243,6 +272,7 @@ class Quotation {
     this.reminderDates = const [],
     this.isBill = false,
     this.adjustment = 0,
+    this.workLogs = const <WorkLog>[],
   });
 
   double get subTotal => items.fold(0, (sum, item) => sum + item.totalValue);
@@ -297,6 +327,7 @@ class Quotation {
     'reminderDates': reminderDates.map((e) => e.toIso8601String()).toList(),
     'isBill': isBill,
     'adjustment': adjustment,
+    'workLogs': workLogs.map((e) => e.toJson()).toList(),
   };
 
   factory Quotation.fromJson(Map<String, dynamic> json) => Quotation(
@@ -329,5 +360,10 @@ class Quotation {
               : []),
     isBill: json['isBill'] ?? false,
     adjustment: (json['adjustment'] as num? ?? 0).toDouble(),
+    workLogs: json['workLogs'] != null
+        ? (json['workLogs'] as List)
+              .map((e) => WorkLog.fromJson(e as Map<String, dynamic>))
+              .toList()
+        : const <WorkLog>[],
   );
 }

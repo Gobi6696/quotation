@@ -39,6 +39,7 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
   TextEditingController? _additionalCostValueController;
   late TextEditingController _adjustmentController;
   List<DateTime> _reminderDates = [];
+  bool _isAdjustmentNegative = false;
 
   double _gstValue = 18.0;
   bool _isGstPercentage = true;
@@ -90,8 +91,9 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
       _additionalCostValue = widget.quotation!.additionalCostValue;
       _reminderDates = List.from(widget.quotation!.reminderDates);
       _adjustmentController = TextEditingController(
-        text: widget.quotation!.adjustment.toString(),
+        text: widget.quotation!.adjustment.abs().toString(),
       );
+      _isAdjustmentNegative = widget.quotation!.adjustment < 0;
     } else {
       _id = const Uuid().v4();
       _quoteNoController = TextEditingController(
@@ -169,13 +171,16 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
         : _gstValue;
   }
 
-  double get _grandTotal =>
-      _subTotal +
-      _transportationAmount +
-      _additionalCostValue +
-      _totalSummaryExtras +
-      _gstAmount +
-      (double.tryParse(_adjustmentController.text) ?? 0);
+  double get _grandTotal {
+    double adj = double.tryParse(_adjustmentController.text) ?? 0;
+    if (_isAdjustmentNegative) adj = -adj;
+    return _subTotal +
+        _transportationAmount +
+        _additionalCostValue +
+        _totalSummaryExtras +
+        _gstAmount +
+        adj;
+  }
 
   void _addItem() {
     setState(() {
@@ -230,6 +235,8 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
           }
         }
 
+        final double adjValue =
+            double.tryParse(_adjustmentController.text) ?? 0;
         final quote = Quotation(
           id: _id,
           quoteNumber: _quoteNoController.text,
@@ -250,7 +257,7 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
           summaryExtras: summaryExtras,
           reminderDates: _reminderDates,
           isBill: widget.quotation?.isBill ?? false,
-          adjustment: double.tryParse(_adjustmentController.text) ?? 0,
+          adjustment: _isAdjustmentNegative ? -adjValue : adjValue,
         );
 
         if (quote.isBill) {
@@ -914,6 +921,56 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
                             color: Colors.grey[600],
                           ),
                         ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: item.isUnitBased
+                                    ? Colors.blue.withOpacity(0.1)
+                                    : Colors.green.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                item.isUnitBased ? "Unit Based" : "Area Based",
+                                style: GoogleFonts.poppins(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: item.isUnitBased
+                                      ? Colors.blue[700]
+                                      : Colors.green[700],
+                                ),
+                              ),
+                            ),
+                            if (!item.isUnitBased) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.purple.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  item.multiplyByArea
+                                      ? "Rate/Area"
+                                      : "Fixed/Item",
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.purple[700],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -961,6 +1018,54 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
                   ),
                 ),
               ],
+              const Divider(height: 20),
+
+              // Inline Edit Section (W, H, Rate)
+              Row(
+                children: [
+                  if (!item.isUnitBased) ...[
+                    Expanded(
+                      child: InlineInput(
+                        label: "W",
+                        value: item.width.toString(),
+                        onChanged: (val) => setState(
+                          () => item.width = double.tryParse(val) ?? 0,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: InlineInput(
+                        label: "H",
+                        value: item.height.toString(),
+                        onChanged: (val) => setState(
+                          () => item.height = double.tryParse(val) ?? 0,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Expanded(
+                    flex: 2,
+                    child: InlineInput(
+                      label: item.isUnitBased ? "Rate" : "Rate/sqft",
+                      value:
+                          (item.isUnitBased ? item.unitRate : item.ratePerSqFt)
+                              .toString(),
+                      onChanged: (val) {
+                        setState(() {
+                          if (item.isUnitBased) {
+                            item.unitRate = double.tryParse(val) ?? 0;
+                          } else {
+                            item.ratePerSqFt = double.tryParse(val) ?? 0;
+                          }
+                        });
+                      },
+                      prefix: "₹",
+                    ),
+                  ),
+                ],
+              ),
               const Divider(height: 24),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1315,19 +1420,48 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
                     ),
                   ),
                 ),
-                SizedBox(
-                  width: 120,
-                  child: TextField(
-                    controller: _adjustmentController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      signed: true,
-                    ),
-                    textAlign: TextAlign.end,
-                    decoration: const InputDecoration(
-                      prefixText: "₹ ",
-                      hintText: "0.00",
-                    ),
-                    onChanged: (_) => setState(() {}),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Row(
+                    children: [
+                      _modeButton(
+                        "+",
+                        !_isAdjustmentNegative,
+                        () => setState(() => _isAdjustmentNegative = false),
+                      ),
+                      _modeButton(
+                        "-",
+                        _isAdjustmentNegative,
+                        () => setState(() => _isAdjustmentNegative = true),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 100,
+                        child: TextField(
+                          controller: _adjustmentController,
+                          keyboardType: TextInputType.number,
+                          textAlign: TextAlign.end,
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                              vertical: 8,
+                              horizontal: 8,
+                            ),
+                            border: InputBorder.none,
+                            prefixText: "₹",
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -1685,6 +1819,106 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         elevation: 2,
       ),
+    );
+  }
+}
+
+class InlineInput extends StatefulWidget {
+  final String label;
+  final String value;
+  final Function(String) onChanged;
+  final String? prefix;
+
+  const InlineInput({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.prefix,
+  });
+
+  @override
+  State<InlineInput> createState() => _InlineInputState();
+}
+
+class _InlineInputState extends State<InlineInput> {
+  late TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    // Use an empty string if value is "0" or "0.0" to allow easier clearing
+    String initialText = (widget.value == "0" || widget.value == "0.0")
+        ? ""
+        : widget.value;
+    _controller = TextEditingController(text: initialText);
+  }
+
+  @override
+  void didUpdateWidget(InlineInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    double? modelVal = double.tryParse(widget.value);
+    double? ctrlVal = double.tryParse(_controller.text);
+
+    // Only update if the numerical value changed from outside
+    // and it's actually different from what the user is currently seeing/typing
+    if (modelVal != ctrlVal) {
+      // Special handling for 0/empty
+      if ((modelVal == 0 || modelVal == null) && _controller.text.isEmpty) {
+        return;
+      }
+
+      String newText = (modelVal == 0 || modelVal == null)
+          ? ""
+          : (modelVal == modelVal.toInt()
+                ? modelVal.toInt().toString()
+                : modelVal.toString());
+
+      _controller.text = newText;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          widget.label,
+          style: GoogleFonts.poppins(fontSize: 10, color: Colors.grey[500]),
+        ),
+        const SizedBox(height: 4),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            color: Colors.grey[50],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: TextField(
+            controller: _controller,
+            onChanged: widget.onChanged,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            style: GoogleFonts.poppins(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+            decoration: InputDecoration(
+              isDense: true,
+              border: InputBorder.none,
+              prefixText: widget.prefix,
+              hintText: "0",
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

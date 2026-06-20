@@ -45,5 +45,16 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>whatsapp</string>
+		<string>https</string>
+	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>This app requires camera access to take photos of work assignments.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app requires photo library access to select photos of work assignments.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app requires microphone access if you capture videos.</string>
 </dict>
 </plist>

@@ -11,6 +11,7 @@ import '../settings/settings_screen.dart';
 import '../settings/template_editor_screen.dart';
 import '../inventory/inventory_screen.dart';
 import '../../controllers/inventory_controller.dart';
+import '../quotation/my_quotations_bills_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -207,6 +208,23 @@ class DashboardScreen extends StatelessWidget {
                   Icons.receipt_long,
                   Colors.teal,
                   () => _showBillHistoryBottomSheet(context, quoteController),
+                ),
+              ],
+            ),
+            const SizedBox(height: 15),
+            Row(
+              children: [
+                _buildMenuCard(
+                  context,
+                  'My Quotations/Bills',
+                  Icons.folder_shared,
+                  const Color(0xFF3F51B5),
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const MyQuotationsBillsScreen(),
+                    ),
+                  ),
                 ),
               ],
             ),
