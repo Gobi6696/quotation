@@ -1,24 +1,120 @@
 import 'dart:io';
 import 'package:flutter/services.dart';
+import 'package:image/image.dart' as img;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import '../models/company_settings.dart';
 import '../models/quotation_model.dart';
 
 class PdfHelper {
+  // ── Font cache: loaded once from bundled assets, reused across calls ──
+  static pw.Font? _cachedFont;
+  static pw.Font? _cachedFontBold;
+
+  static Future<pw.Font> _getFont() async {
+    _cachedFont ??= pw.Font.ttf(
+      (await rootBundle.load(
+        'assets/fonts/Poppins-Regular.ttf',
+      )).buffer.asByteData(),
+    );
+    return _cachedFont!;
+  }
+
+  static Future<pw.Font> getFontBold() async {
+    _cachedFontBold ??= pw.Font.ttf(
+      (await rootBundle.load(
+        'assets/fonts/Poppins-Bold.ttf',
+      )).buffer.asByteData(),
+    );
+    return _cachedFontBold!;
+  }
+
+  /// Loads an image file, resizes it to max 800px, and compresses to JPEG.
+  /// This is CRITICAL to prevent OOM crash when calling pdf.save() —
+  /// raw camera photos are 3–15 MB each; this reduces them to ~50–150 KB.
+  static Future<pw.MemoryImage?> _loadImage(String path) async {
+    try {
+      final file = File(path);
+      if (!await file.exists()) return null;
+      final rawBytes = await file.readAsBytes();
+      if (rawBytes.isEmpty) return null;
+
+      // Decode → resize → re-encode as JPEG
+      final decoded = img.decodeImage(rawBytes);
+      if (decoded == null) {
+        // Decoding failed: embed raw bytes as fallback (rare edge case)
+        return pw.MemoryImage(rawBytes);
+      }
+
+      // Cap longest side at 800px — sufficient for PDF print quality
+      const int maxDim = 800;
+      img.Image scaled = decoded;
+      if (decoded.width > maxDim || decoded.height > maxDim) {
+        if (decoded.width >= decoded.height) {
+          scaled = img.copyResize(
+            decoded,
+            width: maxDim,
+            interpolation: img.Interpolation.linear,
+          );
+        } else {
+          scaled = img.copyResize(
+            decoded,
+            height: maxDim,
+            interpolation: img.Interpolation.linear,
+          );
+        }
+      }
+
+      // Re-encode as JPEG at 80% quality (~50–150 KB vs 3–15 MB raw)
+      final compressed = Uint8List.fromList(img.encodeJpg(scaled, quality: 80));
+      return pw.MemoryImage(compressed);
+    } catch (e) {
+      // ignore: avoid_print
+      print('PDF image load error ($path): $e');
+      return null;
+    }
+  }
+
   static Future<Uint8List> generateQuotation(
     Quotation quote,
     CompanySettings settings,
   ) async {
     final pdf = pw.Document();
 
-    // 0. Cache Fonts and Pre-calculate Data
-    final font = await PdfGoogleFonts.poppinsRegular();
-    final fontBold = await PdfGoogleFonts.poppinsBold();
+    // 0. Load fonts from bundled assets (no network, no OOM)
+    final font = await _getFont();
+    final fontBold = await getFontBold();
 
-    // Cache images to avoid repeated disk reads during layout
+    // Pre-load ALL images asynchronously before PDF layout begins.
+    // This avoids synchronous disk I/O inside pw.MultiPage build callbacks.
     final Map<String, pw.MemoryImage> imageCache = {};
+
+    // Collect every image path referenced by the quotation
+    final Set<String> allImagePaths = {};
+    for (final item in quote.items) {
+      for (final p in item.images) {
+        if (p.isNotEmpty) allImagePaths.add(p);
+      }
+    }
+    for (final el in [
+      ...settings.headerElements,
+      ...settings.footerElements,
+      ...settings.firstPageElements,
+      ...settings.lastPageElements,
+    ]) {
+      if (el.type == PdfElementType.image && el.content.isNotEmpty) {
+        allImagePaths.add(el.content);
+      }
+    }
+    // Load images ONE AT A TIME (sequential, not parallel).
+    // Parallel loading with Future.wait causes an OOM spike:
+    //   each 12MP photo = ~48 MB RAM when decoded by the image package.
+    //   5 photos in parallel = 240 MB peak → Android kills the process.
+    // Sequential keeps peak at ~48 MB (one image decoded at a time).
+    for (final path in allImagePaths) {
+      final loaded = await _loadImage(path);
+      if (loaded != null) imageCache[path] = loaded;
+    }
 
     double originalGrandTotal = 0;
     if (quote.isBill) {
@@ -56,7 +152,22 @@ class PdfHelper {
 
     pdf.addPage(
       pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
+        pageTheme: pw.PageTheme(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(28),
+          // Draws a decorative border on EVERY page automatically
+          buildBackground: (context) => pw.FullPage(
+            ignoreMargins: true,
+            child: pw.Container(
+              margin: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.black, width: 1.5),
+              ),
+            ),
+          ),
+        ),
+        maxPages:
+            1000, // default is only 20 — raises limit for large quotations
         header: (context) => _buildHeaderFooter(
           settings.headerElements,
           font,
@@ -321,22 +432,17 @@ class PdfHelper {
           final String path = el.content;
           if (path.isEmpty) return pw.SizedBox();
 
-          if (!imageCache.containsKey(path)) {
-            final file = File(path);
-            if (file.existsSync()) {
-              try {
-                imageCache[path] = pw.MemoryImage(file.readAsBytesSync());
-              } catch (e) {
-                print("Error loading header/footer image: $e");
-                return pw.SizedBox();
-              }
-            }
-          }
-
+          // Images pre-loaded asynchronously before layout — just look up cache
+          // IMPORTANT: height MUST be bounded — unbounded image height causes
+          // the pdf layout engine to enter an infinite loop → TooManyPagesException
           if (imageCache.containsKey(path)) {
             return pw.Container(
               width: el.size,
-              child: pw.Image(imageCache[path]!),
+              height: el.size, // square bounding box; image contained within
+              child: pw.Image(
+                imageCache[path]!,
+                fit: pw.BoxFit.contain, // preserves aspect ratio
+              ),
             );
           }
           return pw.SizedBox();
@@ -513,32 +619,23 @@ class PdfHelper {
                 padding: const pw.EdgeInsets.all(5),
                 child: pw.Column(
                   children: [
+                    // pw.Wrap is not reliable inside pw.MultiPage —
+                    // use a simple Row of fixed-size boxes instead
                     if (item.images.isNotEmpty)
-                      pw.Wrap(
-                        spacing: 5,
-                        runSpacing: 5,
-                        children: item.images.map((path) {
+                      pw.Row(
+                        children: item.images.take(4).map((path) {
                           if (path.isEmpty) return pw.SizedBox();
-
-                          if (!imageCache.containsKey(path)) {
-                            final file = File(path);
-                            if (file.existsSync()) {
-                              try {
-                                imageCache[path] = pw.MemoryImage(
-                                  file.readAsBytesSync(),
-                                );
-                              } catch (e) {
-                                print("Error loading item image: $e");
-                                return pw.SizedBox();
-                              }
-                            }
-                          }
-
                           if (imageCache.containsKey(path)) {
-                            return pw.Container(
-                              height: 60,
-                              width: 50,
-                              child: pw.Image(imageCache[path]!),
+                            return pw.Padding(
+                              padding: const pw.EdgeInsets.only(right: 5),
+                              child: pw.Container(
+                                height: 60,
+                                width: 50,
+                                child: pw.Image(
+                                  imageCache[path]!,
+                                  fit: pw.BoxFit.cover,
+                                ),
+                              ),
                             );
                           }
                           return pw.SizedBox();
