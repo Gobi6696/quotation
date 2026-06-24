@@ -8,6 +8,8 @@ import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import '../../controllers/quotation_controller.dart';
 import '../../models/quotation_model.dart';
+import '../../models/material_model.dart';
+
 import '../../utils/pdf_helper.dart';
 import '../../utils/excel_helper.dart';
 import 'package:printing/printing.dart';
@@ -40,6 +42,14 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
   late TextEditingController _adjustmentController;
   List<DateTime> _reminderDates = [];
   bool _isAdjustmentNegative = false;
+
+  DateTime? _startDate;
+  DateTime? _endDate;
+  String _status = 'pending';
+  List<WorkLog> _workLogs = [];
+  late TextEditingController _advanceAmountController;
+  List<PaymentRecord> _payments = [];
+  DateTime? _advanceDate;
 
   double _gstValue = 18.0;
   bool _isGstPercentage = true;
@@ -94,6 +104,15 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
         text: widget.quotation!.adjustment.abs().toString(),
       );
       _isAdjustmentNegative = widget.quotation!.adjustment < 0;
+      _startDate = widget.quotation!.startDate;
+      _endDate = widget.quotation!.endDate;
+      _status = widget.quotation!.status;
+      _workLogs = List.from(widget.quotation!.workLogs);
+      _advanceAmountController = TextEditingController(
+        text: widget.quotation!.advanceAmount.toString(),
+      );
+      _payments = List.from(widget.quotation!.payments);
+      _advanceDate = widget.quotation!.advanceDate;
     } else {
       _id = const Uuid().v4();
       _quoteNoController = TextEditingController(
@@ -105,6 +124,17 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
       _selectedDate = DateTime.now();
       _items = [];
       _adjustmentController = TextEditingController(text: "0");
+      _startDate = null;
+      _endDate = null;
+      _status = 'pending';
+      _workLogs = [];
+      _advanceAmountController = TextEditingController(text: "0.0");
+      _payments = [];
+      _advanceDate = null;
+      _gstValue = Provider.of<QuotationController>(
+        context,
+        listen: false,
+      ).defaultGstValue;
     }
     _transportationController = TextEditingController(
       text: _transportation.toString(),
@@ -135,6 +165,7 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
     _gstValueController?.dispose();
     _additionalCostLabelController?.dispose();
     _additionalCostValueController?.dispose();
+    _advanceAmountController.dispose();
     for (var c in _clientDetailKeyControllers) c.dispose();
     for (var c in _clientDetailValueControllers) c.dispose();
     for (var c in _summaryExtraKeyControllers) c.dispose();
@@ -258,6 +289,14 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
           reminderDates: _reminderDates,
           isBill: widget.quotation?.isBill ?? false,
           adjustment: _isAdjustmentNegative ? -adjValue : adjValue,
+          workLogs: _workLogs,
+          materials: widget.quotation?.materials ?? const <MaterialLog>[],
+          startDate: _startDate,
+          endDate: _endDate,
+          status: _status,
+          advanceAmount: double.tryParse(_advanceAmountController.text) ?? 0.0,
+          payments: _payments,
+          advanceDate: _advanceDate,
         );
 
         if (quote.isBill) {
@@ -455,7 +494,17 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
           summaryExtras: summaryExtras,
           reminderDates: _reminderDates,
           isBill: widget.quotation?.isBill ?? false,
-          adjustment: double.tryParse(_adjustmentController.text) ?? 0,
+          adjustment:
+              (_isAdjustmentNegative ? -1 : 1) *
+              (double.tryParse(_adjustmentController.text) ?? 0),
+          workLogs: _workLogs,
+          materials: widget.quotation?.materials ?? const <MaterialLog>[],
+          startDate: _startDate,
+          endDate: _endDate,
+          status: _status,
+          advanceAmount: double.tryParse(_advanceAmountController.text) ?? 0.0,
+          payments: _payments,
+          advanceDate: _advanceDate,
         ),
         settings,
       );
@@ -529,7 +578,17 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
           summaryExtras: summaryExtras,
           reminderDates: _reminderDates,
           isBill: widget.quotation?.isBill ?? false,
-          adjustment: double.tryParse(_adjustmentController.text) ?? 0,
+          adjustment:
+              (_isAdjustmentNegative ? -1 : 1) *
+              (double.tryParse(_adjustmentController.text) ?? 0),
+          workLogs: _workLogs,
+          materials: widget.quotation?.materials ?? const <MaterialLog>[],
+          startDate: _startDate,
+          endDate: _endDate,
+          status: _status,
+          advanceAmount: double.tryParse(_advanceAmountController.text) ?? 0.0,
+          payments: _payments,
+          advanceDate: _advanceDate,
         ),
         settings,
       );
@@ -592,7 +651,17 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
           summaryExtras: summaryExtras,
           reminderDates: _reminderDates,
           isBill: widget.quotation?.isBill ?? false,
-          adjustment: double.tryParse(_adjustmentController.text) ?? 0,
+          adjustment:
+              (_isAdjustmentNegative ? -1 : 1) *
+              (double.tryParse(_adjustmentController.text) ?? 0),
+          workLogs: _workLogs,
+          materials: widget.quotation?.materials ?? const <MaterialLog>[],
+          startDate: _startDate,
+          endDate: _endDate,
+          status: _status,
+          advanceAmount: double.tryParse(_advanceAmountController.text) ?? 0.0,
+          payments: _payments,
+          advanceDate: _advanceDate,
         ),
       );
 
@@ -651,6 +720,17 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
       summaryExtras: widget.quotation!.summaryExtras,
       reminderDates: _reminderDates,
       isBill: true,
+      adjustment:
+          (_isAdjustmentNegative ? -1 : 1) *
+          (double.tryParse(_adjustmentController.text) ?? 0),
+      workLogs: _workLogs,
+      materials: widget.quotation!.materials,
+      startDate: _startDate,
+      endDate: _endDate,
+      status: _status,
+      advanceAmount: double.tryParse(_advanceAmountController.text) ?? 0.0,
+      payments: _payments,
+      advanceDate: _advanceDate,
     );
 
     Navigator.pushReplacement(
@@ -673,12 +753,12 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
           style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
         ),
         actions: [
-          if (widget.quotation != null && !widget.quotation!.isBill)
-            IconButton(
-              icon: const Icon(Icons.receipt, color: Colors.teal),
-              tooltip: 'Convert to Bill',
-              onPressed: _convertToBill,
-            ),
+          // if (widget.quotation != null && !widget.quotation!.isBill)
+          //   IconButton(
+          //     icon: const Icon(Icons.receipt, color: Colors.teal),
+          //     tooltip: 'Convert to Bill',
+          //     onPressed: _convertToBill,
+          //   ),
           IconButton(
             icon: Icon(
               Icons.save,
@@ -720,6 +800,259 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
                       return null;
                     },
                   ),
+                  const SizedBox(height: 20),
+                  _buildSectionTitle('Validity & Status'),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: _startDate ?? DateTime.now(),
+                              firstDate: DateTime.now().subtract(
+                                const Duration(days: 365),
+                              ),
+                              lastDate: DateTime.now().add(
+                                const Duration(days: 365 * 5),
+                              ),
+                            );
+                            if (picked != null) {
+                              setState(() {
+                                _startDate = picked;
+                                if (_endDate != null &&
+                                    _startDate!.isAfter(_endDate!)) {
+                                  _endDate = _startDate;
+                                }
+                              });
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 15,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Start Date',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.calendar_today,
+                                      size: 14,
+                                      color: Color(0xFF6A11CB),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      _startDate != null
+                                          ? DateFormat(
+                                              'dd MMM yyyy',
+                                            ).format(_startDate!)
+                                          : 'Select Date',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 13,
+                                        fontWeight: _startDate != null
+                                            ? FontWeight.w600
+                                            : FontWeight.normal,
+                                        color: _startDate != null
+                                            ? Colors.black87
+                                            : Colors.grey,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 15),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate:
+                                  (_endDate != null &&
+                                      (_startDate == null ||
+                                          !_endDate!.isBefore(_startDate!)))
+                                  ? _endDate!
+                                  : (_startDate ?? DateTime.now()),
+                              firstDate:
+                                  _startDate ??
+                                  DateTime.now().subtract(
+                                    const Duration(days: 365),
+                                  ),
+                              lastDate: DateTime.now().add(
+                                const Duration(days: 365 * 5),
+                              ),
+                            );
+                            if (picked != null) {
+                              setState(() {
+                                _endDate = picked;
+                              });
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 15,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'End Date',
+                                  style: GoogleFonts.poppins(
+                                    fontSize: 11,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.calendar_today,
+                                      size: 14,
+                                      color: Color(0xFF2575FC),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      _endDate != null
+                                          ? DateFormat(
+                                              'dd MMM yyyy',
+                                            ).format(_endDate!)
+                                          : 'Select Date',
+                                      style: GoogleFonts.poppins(
+                                        fontSize: 13,
+                                        fontWeight: _endDate != null
+                                            ? FontWeight.w600
+                                            : FontWeight.normal,
+                                        color: _endDate != null
+                                            ? Colors.black87
+                                            : Colors.grey,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: DropdownButtonFormField<String>(
+                      value: _status,
+                      decoration: InputDecoration(
+                        labelText: 'Status',
+                        labelStyle: GoogleFonts.poppins(
+                          fontSize: 13,
+                          color: Colors.grey[600],
+                        ),
+                        border: InputBorder.none,
+                      ),
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: Colors.black87,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'pending',
+                          child: Text('Pending'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'processing',
+                          child: Text('Processing'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'completed',
+                          child: Text('Completed'),
+                        ),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            _status = val;
+                          });
+                        }
+                      },
+                    ),
+                  ),
+                  if (_workLogs.isNotEmpty) ...[
+                    const SizedBox(height: 20),
+                    _buildSectionTitle('Employee Assignment Logs'),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey[200]!),
+                      ),
+                      child: Column(
+                        children: _workLogs.map((log) {
+                          final formattedDate = DateFormat(
+                            'dd MMM yyyy',
+                          ).format(log.date);
+                          return CheckboxListTile(
+                            title: Text(
+                              log.employeeName,
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: const Color(0xFF1A1A1A),
+                              ),
+                            ),
+                            subtitle: Text(
+                              'Assigned: $formattedDate',
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                            secondary: const Icon(
+                              Icons.engineering,
+                              color: Color(0xFF3F51B5),
+                            ),
+                            value: log.includeInPdf,
+                            activeColor: const Color(0xFF3F51B5),
+                            onChanged: (bool? val) {
+                              setState(() {
+                                log.includeInPdf = val ?? false;
+                              });
+                            },
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 10),
                   ...List.generate(_clientDetailKeyControllers.length, (index) {
                     return Padding(
@@ -1407,65 +1740,69 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
           }),
           if (_showGst) _summaryRow("GST Amount", _gstAmount, isSmall: true),
 
-          if (widget.quotation?.isBill == true) ...[
-            const Divider(height: 30),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    "Bill Adjustment (±)",
-                    style: GoogleFonts.poppins(
-                      color: Colors.teal,
-                      fontWeight: FontWeight.w600,
+          const Divider(height: 30),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  widget.quotation?.isBill == true
+                      ? "Bill Adjustment (±)"
+                      : "Adjustment (±)",
+                  style: GoogleFonts.poppins(
+                    color: widget.quotation?.isBill == true
+                        ? Colors.teal
+                        : const Color(0xFF6A11CB),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.grey.shade300),
+                ),
+                child: Row(
+                  children: [
+                    _modeButton(
+                      "+",
+                      !_isAdjustmentNegative,
+                      () => setState(() => _isAdjustmentNegative = false),
                     ),
-                  ),
-                ),
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.grey.shade300),
-                  ),
-                  child: Row(
-                    children: [
-                      _modeButton(
-                        "+",
-                        !_isAdjustmentNegative,
-                        () => setState(() => _isAdjustmentNegative = false),
-                      ),
-                      _modeButton(
-                        "-",
-                        _isAdjustmentNegative,
-                        () => setState(() => _isAdjustmentNegative = true),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 100,
-                        child: TextField(
-                          controller: _adjustmentController,
-                          keyboardType: TextInputType.number,
-                          textAlign: TextAlign.end,
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(
-                              vertical: 8,
-                              horizontal: 8,
-                            ),
-                            border: InputBorder.none,
-                            prefixText: "₹",
-                          ),
-                          onChanged: (_) => setState(() {}),
+                    _modeButton(
+                      "-",
+                      _isAdjustmentNegative,
+                      () => setState(() => _isAdjustmentNegative = true),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 100,
+                      child: TextField(
+                        controller: _adjustmentController,
+                        keyboardType: TextInputType.number,
+                        textAlign: TextAlign.end,
+                        style: GoogleFonts.poppins(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
                         ),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 8,
+                          ),
+                          border: InputBorder.none,
+                          prefixText: "₹",
+                        ),
+                        onChanged: (_) => setState(() {}),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
+          ),
+          if (widget.quotation?.isBill == true) ...[
             const SizedBox(height: 10),
             // Show original grand total as reference if it's a bill
             Builder(
@@ -1502,6 +1839,12 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
                         widget.quotation?.additionalCostValue ?? 0,
                     summaryExtras: widget.quotation?.summaryExtras ?? {},
                     adjustment: 0,
+                    workLogs: widget.quotation?.workLogs ?? const <WorkLog>[],
+                    materials:
+                        widget.quotation?.materials ?? const <MaterialLog>[],
+                    startDate: _startDate,
+                    endDate: _endDate,
+                    status: _status,
                   );
                   originalGrandTotal = tempQuote.grandTotal;
                 } catch (e) {}
@@ -1555,7 +1898,8 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+          _buildPaymentsAndAdvancesSection(),
           const SizedBox(height: 25),
           Row(
             children: [
@@ -1587,6 +1931,18 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
               ),
             ],
           ),
+          if (widget.quotation != null && !widget.quotation!.isBill) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: _buildActionButton(
+                'Convert to Bill',
+                Icons.receipt,
+                Colors.teal,
+                _isLoading ? null : _convertToBill,
+              ),
+            ),
+          ],
           const SizedBox(height: 15),
 
           // Multi-Reminder List
@@ -1795,6 +2151,395 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showAddPaymentDialog() {
+    DateTime selectedDate = DateTime.now();
+    final amountController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text(
+                "Add Payment",
+                style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: amountController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: "Payment Amount",
+                      prefixText: "₹",
+                      border: OutlineInputBorder(),
+                    ),
+                    style: GoogleFonts.poppins(),
+                  ),
+                  const SizedBox(height: 16),
+                  InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: selectedDate,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2100),
+                      );
+                      if (picked != null) {
+                        setDialogState(() {
+                          selectedDate = picked;
+                        });
+                      }
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: "Payment Date",
+                        prefixIcon: Icon(Icons.calendar_today, size: 16),
+                        border: OutlineInputBorder(),
+                      ),
+                      child: Text(
+                        DateFormat('dd MMM yyyy').format(selectedDate),
+                        style: GoogleFonts.poppins(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text("Cancel", style: GoogleFonts.poppins()),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final double? amount = double.tryParse(
+                      amountController.text,
+                    );
+                    if (amount != null && amount > 0) {
+                      setState(() {
+                        _payments.add(
+                          PaymentRecord(
+                            id: const Uuid().v4(),
+                            amount: amount,
+                            date: selectedDate,
+                          ),
+                        );
+                      });
+                      Navigator.pop(context);
+                    }
+                  },
+                  child: Text("Add", style: GoogleFonts.poppins()),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildPaymentsAndAdvancesSection() {
+    final themeColor = widget.quotation?.isBill == true
+        ? Colors.teal
+        : const Color(0xFF6A11CB);
+    return Card(
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    "Payments & Advances",
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: themeColor,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: _showAddPaymentDialog,
+                  icon: const Icon(Icons.add, size: 16),
+                  label: Text(
+                    "Add Payment",
+                    style: GoogleFonts.poppins(fontSize: 12),
+                  ),
+                  style: TextButton.styleFrom(foregroundColor: themeColor),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Advance Payment Section
+            Row(
+              children: [
+                Expanded(
+                  child: InkWell(
+                    onTap: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: _advanceDate ?? DateTime.now(),
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2100),
+                      );
+                      if (picked != null) {
+                        setState(() {
+                          _advanceDate = picked;
+                        });
+                      }
+                    },
+                    child: InputDecorator(
+                      decoration: const InputDecoration(
+                        labelText: "Advance Date",
+                        prefixIcon: Icon(Icons.calendar_today, size: 16),
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                      ),
+                      child: Text(
+                        _advanceDate != null
+                            ? DateFormat('dd MMM yyyy').format(_advanceDate!)
+                            : "Select Date",
+                        style: GoogleFonts.poppins(fontSize: 13),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextFormField(
+                    controller: _advanceAmountController,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: "Advance Amount",
+                      prefixText: "₹",
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                    ),
+                    style: GoogleFonts.poppins(fontSize: 13),
+                    onChanged: (val) {
+                      setState(() {});
+                    },
+                  ),
+                ),
+              ],
+            ),
+            if (_payments.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Text(
+                "Additional Payments",
+                style: GoogleFonts.poppins(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                  color: Colors.grey.shade700,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: _payments.length,
+                itemBuilder: (context, index) {
+                  final payment = _payments[index];
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.payment,
+                                size: 16,
+                                color: Colors.green,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  "₹${payment.amount.toStringAsFixed(2)}",
+                                  style: GoogleFonts.poppins(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              DateFormat('dd MMM yyyy').format(payment.date),
+                              style: GoogleFonts.poppins(
+                                fontSize: 12,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                size: 18,
+                                color: Colors.redAccent,
+                              ),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              onPressed: () {
+                                setState(() {
+                                  _payments.removeAt(index);
+                                });
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
+            const Divider(height: 24),
+            // Balance breakdown
+            () {
+              final double advAmt =
+                  double.tryParse(_advanceAmountController.text) ?? 0.0;
+              final double extraPaymentsSum = _payments.fold(
+                0.0,
+                (sum, p) => sum + p.amount,
+              );
+              final double totalPaid = advAmt + extraPaymentsSum;
+              final double remaining = _grandTotal - totalPaid;
+              if (remaining <= 0) {
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.check_circle, color: Colors.green),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          "TOTAL AMOUNT RECEIVED",
+                          style: GoogleFonts.poppins(
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green.shade800,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              } else {
+                return Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            "Total Paid",
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            "₹${totalPaid.toStringAsFixed(2)}",
+                            style: GoogleFonts.poppins(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.grey.shade800,
+                            ),
+                            textAlign: TextAlign.end,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            "Remaining Balance",
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                              color: Colors.grey.shade800,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            "₹${remaining.toStringAsFixed(2)}",
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: themeColor,
+                            ),
+                            textAlign: TextAlign.end,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                );
+              }
+            }(),
+          ],
+        ),
       ),
     );
   }

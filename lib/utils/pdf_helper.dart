@@ -3,8 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:image/image.dart' as img;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'package:intl/intl.dart';
 import '../models/company_settings.dart';
 import '../models/quotation_model.dart';
+import '../models/material_model.dart';
 
 class PdfHelper {
   // ── Font cache: loaded once from bundled assets, reused across calls ──
@@ -252,6 +254,7 @@ class PdfHelper {
           ),
           pw.SizedBox(height: 20),
           _buildSummary(quote, font, fontBold, originalGrandTotal),
+          _buildWorkLogs(quote, font, fontBold),
 
           // 3. Last Page
           if (settings.lastPageElements.isNotEmpty) ...[
@@ -929,12 +932,70 @@ class PdfHelper {
     );
   }
 
+  static pw.Widget _buildWorkLogs(
+    Quotation quote,
+    pw.Font font,
+    pw.Font fontBold,
+  ) {
+    final includedLogs = quote.workLogs
+        .where((log) => log.includeInPdf)
+        .toList();
+    if (includedLogs.isEmpty) return pw.SizedBox();
+
+    return pw.Container(
+      margin: const pw.EdgeInsets.only(top: 15),
+      padding: const pw.EdgeInsets.all(8),
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
+        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            "WORK ASSIGNMENT / SCHEDULE LOGS",
+            style: pw.TextStyle(
+              font: fontBold,
+              fontSize: 7.5,
+              color: PdfColors.indigo900,
+            ),
+          ),
+          pw.SizedBox(height: 5),
+          ...includedLogs.map((log) {
+            final formattedDate = DateFormat('dd MMM yyyy').format(log.date);
+            return pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(vertical: 2),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text(
+                    "Employee: ${log.employeeName}",
+                    style: pw.TextStyle(font: font, fontSize: 7),
+                  ),
+                  pw.Text(
+                    "Assignment Date: $formattedDate",
+                    style: pw.TextStyle(font: font, fontSize: 7),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
   static pw.Widget _buildSummary(
     Quotation quote,
     pw.Font font,
     pw.Font fontBold,
     double originalGrandTotal,
   ) {
+    final double totalReceived =
+        quote.advanceAmount +
+        quote.payments.fold(0.0, (sum, p) => sum + p.amount);
+    final double remaining = quote.grandTotal - totalReceived;
+
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.end,
       children: [
@@ -998,6 +1059,63 @@ class PdfHelper {
                 "Grand Total: ₹${quote.grandTotal.toStringAsFixed(2)}",
                 style: pw.TextStyle(font: fontBold, fontSize: 12),
               ),
+            if (quote.advanceAmount > 0 || quote.payments.isNotEmpty) ...[
+              pw.SizedBox(height: 8),
+              pw.Text(
+                "Payments Received:",
+                style: pw.TextStyle(font: fontBold, fontSize: 8),
+              ),
+              if (quote.advanceAmount > 0)
+                pw.Text(
+                  "Advance: ₹${quote.advanceAmount.toStringAsFixed(2)}${quote.advanceDate != null ? ' on ' + DateFormat('dd MMM yyyy').format(quote.advanceDate!) : ''}",
+                  style: pw.TextStyle(font: font, fontSize: 7.5),
+                ),
+              ...quote.payments.map(
+                (p) => pw.Text(
+                  "Payment: ₹${p.amount.toStringAsFixed(2)} on ${DateFormat('dd MMM yyyy').format(p.date)}",
+                  style: pw.TextStyle(font: font, fontSize: 7.5),
+                ),
+              ),
+              pw.Divider(thickness: 0.5, color: PdfColors.grey400),
+              if (remaining <= 0)
+                pw.Container(
+                  margin: const pw.EdgeInsets.only(top: 5),
+                  padding: const pw.EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: const pw.BoxDecoration(
+                    color: PdfColors.green100,
+                    borderRadius: pw.BorderRadius.all(pw.Radius.circular(4)),
+                  ),
+                  child: pw.Text(
+                    "TOTAL AMOUNT RECEIVED",
+                    style: pw.TextStyle(
+                      font: fontBold,
+                      fontSize: 9,
+                      color: PdfColors.green900,
+                    ),
+                  ),
+                )
+              else
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      "Total Paid: ₹${totalReceived.toStringAsFixed(2)}",
+                      style: pw.TextStyle(font: font, fontSize: 8),
+                    ),
+                    pw.Text(
+                      "Remaining Balance: ₹${remaining.toStringAsFixed(2)}",
+                      style: pw.TextStyle(
+                        font: fontBold,
+                        fontSize: 9.5,
+                        color: PdfColors.indigo,
+                      ),
+                    ),
+                  ],
+                ),
+            ],
           ],
         ),
       ],
@@ -1096,6 +1214,333 @@ class PdfHelper {
     return pw.Padding(
       padding: const pw.EdgeInsets.all(2),
       child: pw.Text(text, style: pw.TextStyle(font: font, fontSize: 6.5)),
+    );
+  }
+
+  static Future<Uint8List> generateMaterialsPdf(
+    List<MaterialLog> materials,
+    Quotation quotation,
+    CompanySettings settings,
+  ) async {
+    final pdf = pw.Document();
+
+    final font = await _getFont();
+    final fontBold = await getFontBold();
+
+    final Map<String, pw.MemoryImage> imageCache = {};
+    final Set<String> allImagePaths = {};
+
+    for (final mat in materials) {
+      if (mat.image != null && mat.image!.isNotEmpty) {
+        allImagePaths.add(mat.image!);
+      }
+    }
+
+    for (final el in [
+      ...settings.headerElements,
+      ...settings.footerElements,
+      ...settings.firstPageElements,
+      ...settings.lastPageElements,
+    ]) {
+      if (el.type == PdfElementType.image && el.content.isNotEmpty) {
+        allImagePaths.add(el.content);
+      }
+    }
+
+    for (final path in allImagePaths) {
+      final loaded = await _loadImage(path);
+      if (loaded != null) imageCache[path] = loaded;
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageTheme: pw.PageTheme(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(28),
+          buildBackground: (context) => pw.FullPage(
+            ignoreMargins: true,
+            child: pw.Container(
+              margin: const pw.EdgeInsets.all(8),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.black, width: 1.5),
+              ),
+            ),
+          ),
+        ),
+        header: (context) => _buildHeaderFooter(
+          settings.headerElements,
+          font,
+          fontBold,
+          isHeader: true,
+          quote: quotation,
+          imageCache: imageCache,
+        ),
+        footer: (context) => _buildHeaderFooter(
+          settings.footerElements,
+          font,
+          fontBold,
+          isHeader: false,
+          context: context,
+          quote: quotation,
+          imageCache: imageCache,
+        ),
+        build: (context) {
+          final double totalCost = materials.fold(
+            0,
+            (sum, m) => sum + (m.quantity * m.price),
+          );
+          final tealColor = PdfColor.fromHex('#008080');
+          final headerBg = PdfColor.fromHex('#E0F2F1');
+
+          return [
+            pw.Center(
+              child: pw.Text(
+                "MATERIAL DETAILS SUMMARY",
+                style: pw.TextStyle(
+                  font: fontBold,
+                  fontSize: 16,
+                  color: tealColor,
+                ),
+              ),
+            ),
+            pw.SizedBox(height: 15),
+
+            pw.Container(
+              padding: const pw.EdgeInsets.all(10),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
+                color: PdfColor.fromHex('#F9F9F9'),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Row(
+                    mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    children: [
+                      pw.Text(
+                        "Client Name: ${quotation.clientName}",
+                        style: pw.TextStyle(font: fontBold, fontSize: 10),
+                      ),
+                      pw.Text(
+                        "Date: ${DateFormat('dd MMM yyyy').format(DateTime.now())}",
+                        style: pw.TextStyle(font: font, fontSize: 9),
+                      ),
+                    ],
+                  ),
+                  pw.SizedBox(height: 5),
+                  pw.Text(
+                    "Contact Phone: ${quotation.clientPhone}",
+                    style: pw.TextStyle(font: font, fontSize: 9),
+                  ),
+                  pw.Text(
+                    "Document Ref: ${quotation.quoteNumber}",
+                    style: pw.TextStyle(font: font, fontSize: 9),
+                  ),
+                  if (quotation.clientAddress.isNotEmpty) ...[
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      "Address: ${quotation.clientAddress}",
+                      style: pw.TextStyle(font: font, fontSize: 9),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 20),
+
+            ...materials.map((mat) {
+              return pw.Container(
+                margin: const pw.EdgeInsets.only(bottom: 12),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: PdfColors.grey400, width: 0.5),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Container(
+                      padding: const pw.EdgeInsets.all(5),
+                      color: headerBg,
+                      child: pw.Row(
+                        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                        children: [
+                          pw.Text(
+                            mat.name,
+                            style: pw.TextStyle(
+                              font: fontBold,
+                              fontSize: 10,
+                              color: tealColor,
+                            ),
+                          ),
+                          if (mat.purchaseDate != null)
+                            pw.Text(
+                              "Purchase Date: ${DateFormat('dd MMM yyyy').format(mat.purchaseDate!)}",
+                              style: pw.TextStyle(
+                                font: fontBold,
+                                fontSize: 8,
+                                color: PdfColors.teal900,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(8),
+                      child: pw.Row(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          if (mat.image != null &&
+                              mat.image!.isNotEmpty &&
+                              imageCache.containsKey(mat.image))
+                            pw.Padding(
+                              padding: const pw.EdgeInsets.only(right: 12),
+                              child: pw.Container(
+                                width: 90,
+                                height: 70,
+                                decoration: pw.BoxDecoration(
+                                  border: pw.Border.all(
+                                    color: PdfColors.grey300,
+                                    width: 0.5,
+                                  ),
+                                ),
+                                child: pw.Image(
+                                  imageCache[mat.image!]!,
+                                  fit: pw.BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                          pw.Expanded(
+                            child: pw.Column(
+                              crossAxisAlignment: pw.CrossAxisAlignment.start,
+                              children: [
+                                pw.Table(
+                                  columnWidths: {
+                                    0: const pw.FixedColumnWidth(80),
+                                    1: const pw.FlexColumnWidth(1),
+                                  },
+                                  children: [
+                                    _buildTableRow(
+                                      "Size / Spec:",
+                                      mat.size,
+                                      font,
+                                      fontBold,
+                                    ),
+                                    _buildTableRow(
+                                      "Quantity:",
+                                      mat.quantity.toStringAsFixed(1),
+                                      font,
+                                      fontBold,
+                                    ),
+                                    _buildTableRow(
+                                      "Price per Unit:",
+                                      "₹${mat.price.toStringAsFixed(2)}",
+                                      font,
+                                      fontBold,
+                                    ),
+                                    _buildTableRow(
+                                      "Total Cost:",
+                                      "₹${(mat.quantity * mat.price).toStringAsFixed(2)}",
+                                      font,
+                                      fontBold,
+                                      isTotal: true,
+                                    ),
+                                  ],
+                                ),
+                                if (mat.customFields.isNotEmpty) ...[
+                                  pw.SizedBox(height: 6),
+                                  pw.Text(
+                                    "Additional Information:",
+                                    style: pw.TextStyle(
+                                      font: fontBold,
+                                      fontSize: 8,
+                                    ),
+                                  ),
+                                  pw.SizedBox(height: 2),
+                                  pw.Wrap(
+                                    spacing: 10,
+                                    runSpacing: 2,
+                                    children: mat.customFields.entries.map((e) {
+                                      return pw.Text(
+                                        "${e.key}: ${e.value}",
+                                        style: pw.TextStyle(
+                                          font: font,
+                                          fontSize: 8,
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+
+            pw.SizedBox(height: 20),
+
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.end,
+              children: [
+                pw.Container(
+                  padding: const pw.EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: tealColor, width: 1.5),
+                    borderRadius: const pw.BorderRadius.all(
+                      pw.Radius.circular(6),
+                    ),
+                    color: PdfColor.fromHex('#E0F2F1'),
+                  ),
+                  child: pw.Text(
+                    "Grand Total Material Cost: ₹${totalCost.toStringAsFixed(2)}",
+                    style: pw.TextStyle(
+                      font: fontBold,
+                      fontSize: 12,
+                      color: tealColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ];
+        },
+      ),
+    );
+
+    return pdf.save();
+  }
+
+  static pw.TableRow _buildTableRow(
+    String label,
+    String value,
+    pw.Font font,
+    pw.Font fontBold, {
+    bool isTotal = false,
+  }) {
+    return pw.TableRow(
+      children: [
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
+          child: pw.Text(label, style: pw.TextStyle(font: font, fontSize: 8)),
+        ),
+        pw.Padding(
+          padding: const pw.EdgeInsets.symmetric(vertical: 1.5),
+          child: pw.Text(
+            value,
+            style: pw.TextStyle(
+              font: isTotal ? fontBold : font,
+              fontSize: 8,
+              color: isTotal ? PdfColors.teal900 : PdfColors.black,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

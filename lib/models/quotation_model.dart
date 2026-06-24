@@ -1,4 +1,5 @@
 import 'package:uuid/uuid.dart';
+import 'material_model.dart';
 
 class QuotationItem {
   final String id;
@@ -202,12 +203,14 @@ class WorkLog {
   final String employeeName;
   final DateTime date;
   final List<String> images;
+  bool includeInPdf;
 
   WorkLog({
     required this.id,
     required this.employeeName,
     required this.date,
     required this.images,
+    this.includeInPdf = true,
   });
 
   Map<String, dynamic> toJson() => {
@@ -215,6 +218,7 @@ class WorkLog {
     'employeeName': employeeName,
     'date': date.toIso8601String(),
     'images': images,
+    'includeInPdf': includeInPdf,
   };
 
   factory WorkLog.fromJson(Map<String, dynamic> json) => WorkLog(
@@ -222,6 +226,31 @@ class WorkLog {
     employeeName: json['employeeName'] ?? '',
     date: json['date'] != null ? DateTime.parse(json['date']) : DateTime.now(),
     images: List<String>.from(json['images'] ?? []),
+    includeInPdf: json['includeInPdf'] ?? true,
+  );
+}
+
+class PaymentRecord {
+  final String id;
+  final double amount;
+  final DateTime date;
+
+  PaymentRecord({
+    required this.id,
+    required this.amount,
+    required this.date,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'amount': amount,
+    'date': date.toIso8601String(),
+  };
+
+  factory PaymentRecord.fromJson(Map<String, dynamic> json) => PaymentRecord(
+    id: json['id'] ?? '',
+    amount: (json['amount'] as num? ?? 0).toDouble(),
+    date: json['date'] != null ? DateTime.parse(json['date']) : DateTime.now(),
   );
 }
 
@@ -251,6 +280,14 @@ class Quotation {
   final double adjustment;
   final List<WorkLog> workLogs;
 
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final String status;
+  final List<MaterialLog> materials;
+  final double advanceAmount;
+  final List<PaymentRecord> payments;
+  final DateTime? advanceDate;
+
   Quotation({
     required this.id,
     required this.quoteNumber,
@@ -273,6 +310,13 @@ class Quotation {
     this.isBill = false,
     this.adjustment = 0,
     this.workLogs = const <WorkLog>[],
+    this.startDate,
+    this.endDate,
+    this.status = 'pending',
+    this.materials = const <MaterialLog>[],
+    this.advanceAmount = 0.0,
+    this.payments = const <PaymentRecord>[],
+    this.advanceDate,
   });
 
   double get subTotal => items.fold(0, (sum, item) => sum + item.totalValue);
@@ -328,6 +372,13 @@ class Quotation {
     'isBill': isBill,
     'adjustment': adjustment,
     'workLogs': workLogs.map((e) => e.toJson()).toList(),
+    'startDate': startDate?.toIso8601String(),
+    'endDate': endDate?.toIso8601String(),
+    'status': status,
+    'materials': materials.map((e) => e.toJson()).toList(),
+    'advanceAmount': advanceAmount,
+    'advanceDate': advanceDate?.toIso8601String(),
+    'payments': payments.map((e) => e.toJson()).toList(),
   };
 
   factory Quotation.fromJson(Map<String, dynamic> json) => Quotation(
@@ -365,5 +416,22 @@ class Quotation {
               .map((e) => WorkLog.fromJson(e as Map<String, dynamic>))
               .toList()
         : const <WorkLog>[],
+    startDate: json['startDate'] != null
+        ? DateTime.parse(json['startDate'])
+        : null,
+    endDate: json['endDate'] != null ? DateTime.parse(json['endDate']) : null,
+    status: json['status'] ?? 'pending',
+    materials: json['materials'] != null
+        ? (json['materials'] as List)
+              .map((e) => MaterialLog.fromJson(e as Map<String, dynamic>))
+              .toList()
+        : const <MaterialLog>[],
+    advanceAmount: (json['advanceAmount'] as num? ?? 0.0).toDouble(),
+    advanceDate: json['advanceDate'] != null ? DateTime.parse(json['advanceDate']) : null,
+    payments: json['payments'] != null
+        ? (json['payments'] as List)
+              .map((e) => PaymentRecord.fromJson(e as Map<String, dynamic>))
+              .toList()
+        : const <PaymentRecord>[],
   );
 }

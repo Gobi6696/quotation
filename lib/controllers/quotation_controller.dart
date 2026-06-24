@@ -1,6 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/company_settings.dart';
 import '../models/quotation_model.dart';
+import '../models/employee_model.dart';
+import '../models/material_model.dart';
 import '../utils/file_helper.dart';
 import '../utils/drive_helper.dart';
 import '../utils/media_sync_helper.dart';
@@ -13,13 +17,32 @@ class QuotationController with ChangeNotifier {
   CompanySettings? _settings;
   List<Quotation> _quotations = [];
   List<Quotation> _bills = [];
+  List<Employee> _employees = [];
   Map<String, dynamic> _driveDataCache = {};
   bool _isLoading = false;
+
+  Timer? _autoRefreshTimer;
+  int _refreshInterval = 5; // Default is 5 minutes
+  double _defaultGstValue = 18.0; // Default GST value is 18%
 
   CompanySettings? get settings => _settings;
   List<Quotation> get quotations => _quotations;
   List<Quotation> get bills => _bills;
+  List<Employee> get employees => _employees;
   bool get isLoading => _isLoading;
+  int get refreshInterval => _refreshInterval;
+  double get defaultGstValue => _defaultGstValue;
+
+  List<MaterialLog> get allMaterials {
+    final List<MaterialLog> list = [];
+    for (var q in _quotations) {
+      list.addAll(q.materials);
+    }
+    for (var b in _bills) {
+      list.addAll(b.materials);
+    }
+    return list;
+  }
 
   QuotationController(this.authController) {
     _loadData();
@@ -34,6 +57,7 @@ class QuotationController with ChangeNotifier {
 
   @override
   void dispose() {
+    _autoRefreshTimer?.cancel();
     authController.removeListener(_onAuthChanged);
     super.dispose();
   }
@@ -45,6 +69,12 @@ class QuotationController with ChangeNotifier {
     _settings = await FileHelper.loadSettings();
     _quotations = await FileHelper.getAllQuotations();
     _bills = await FileHelper.getAllBills();
+    _employees = await FileHelper.loadEmployees();
+    
+    final prefs = await SharedPreferences.getInstance();
+    _refreshInterval = prefs.getInt('auto_refresh_interval') ?? 5;
+    _defaultGstValue = prefs.getDouble('default_gst_value') ?? 18.0;
+    _startAutoRefreshTimer();
     
     // If local data is empty, try to sync from Drive
     if (_quotations.isEmpty && _bills.isEmpty && authController.user != null) {
@@ -52,6 +82,35 @@ class QuotationController with ChangeNotifier {
     }
     _isLoading = false;
     _scheduleAllReminders();
+    notifyListeners();
+  }
+
+  void _startAutoRefreshTimer() {
+    _autoRefreshTimer?.cancel();
+    if (_refreshInterval > 0) {
+      _autoRefreshTimer = Timer.periodic(
+        Duration(minutes: _refreshInterval),
+        (timer) {
+          if (!_isLoading) {
+            syncWithDrive();
+          }
+        },
+      );
+    }
+  }
+
+  Future<void> setRefreshInterval(int minutes) async {
+    _refreshInterval = minutes;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('auto_refresh_interval', minutes);
+    _startAutoRefreshTimer();
+    notifyListeners();
+  }
+
+  Future<void> setDefaultGstValue(double value) async {
+    _defaultGstValue = value;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('default_gst_value', value);
     notifyListeners();
   }
 
@@ -74,6 +133,13 @@ class QuotationController with ChangeNotifier {
         if (driveData.containsKey('settings')) {
           _settings = CompanySettings.fromJson(driveData['settings']);
           await FileHelper.saveSettings(_settings!);
+        }
+
+        // Restore Employees
+        if (driveData.containsKey('employees')) {
+          final List list = driveData['employees'];
+          _employees = list.map((e) => Employee.fromJson(e)).toList();
+          await FileHelper.saveEmployees(_employees);
         }
         
         // Restore Quotations
@@ -126,6 +192,43 @@ class QuotationController with ChangeNotifier {
       await DriveHelper.uploadUserData(authController.googleSignIn, driveData);
     }
     
+    notifyListeners();
+  }
+
+  Future<void> saveEmployee(Employee employee) async {
+    final index = _employees.indexWhere((emp) => emp.id == employee.id);
+    if (index != -1) {
+      _employees[index] = employee;
+    } else {
+      _employees.add(employee);
+    }
+    await FileHelper.saveEmployees(_employees);
+
+    if (authController.user != null) {
+      _driveDataCache['employees'] = _employees.map((e) => e.toJson()).toList();
+      try {
+        final driveData = await MediaSyncHelper.prepareForUpload(_driveDataCache);
+        await DriveHelper.uploadUserData(authController.googleSignIn, driveData);
+      } catch (e) {
+        print("Error uploading employees: $e");
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<void> deleteEmployee(String id) async {
+    _employees.removeWhere((emp) => emp.id == id);
+    await FileHelper.saveEmployees(_employees);
+
+    if (authController.user != null) {
+      _driveDataCache['employees'] = _employees.map((e) => e.toJson()).toList();
+      try {
+        final driveData = await MediaSyncHelper.prepareForUpload(_driveDataCache);
+        await DriveHelper.uploadUserData(authController.googleSignIn, driveData);
+      } catch (e) {
+        print("Error uploading employees after deletion: $e");
+      }
+    }
     notifyListeners();
   }
 

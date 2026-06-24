@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/company_settings.dart';
 import '../models/quotation_model.dart';
+import '../models/employee_model.dart';
 
 class FileHelper {
   static Future<String> get _localPath async {
@@ -33,6 +33,11 @@ class FileHelper {
   static Future<File> get _inventoryFile async {
     final path = await _localPath;
     return File('$path/inventory.json');
+  }
+
+  static Future<File> get _employeesFile async {
+    final path = await _localPath;
+    return File('$path/employees.json');
   }
 
   static Future<void> saveSettings(CompanySettings settings) async {
@@ -124,6 +129,27 @@ class FileHelper {
       }
     } catch (e) {
       print("Error loading inventory: $e");
+    }
+    return [];
+  }
+
+  static Future<void> saveEmployees(List<Employee> list) async {
+    final file = await _employeesFile;
+    await file.writeAsString(
+      json.encode(list.map((e) => e.toJson()).toList()),
+    );
+  }
+
+  static Future<List<Employee>> loadEmployees() async {
+    try {
+      final file = await _employeesFile;
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        final List list = json.decode(content);
+        return list.map((e) => Employee.fromJson(e)).toList();
+      }
+    } catch (e) {
+      print("Error loading employees: $e");
     }
     return [];
   }

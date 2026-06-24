@@ -4,73 +4,24 @@ import 'package:provider/provider.dart';
 import 'package:animate_do/animate_do.dart';
 import '../../controllers/auth_controller.dart';
 import '../auth/login_screen.dart';
-import '../profile/profile_screen.dart';
 import '../../controllers/quotation_controller.dart';
 import '../quotation/quotation_editor_screen.dart';
 import '../settings/settings_screen.dart';
 import '../settings/template_editor_screen.dart';
 import '../inventory/inventory_screen.dart';
-import '../../controllers/inventory_controller.dart';
 import '../quotation/my_quotations_bills_screen.dart';
+import '../quotation/budget_screen.dart';
+import '../employee/employee_screen.dart';
+import '../settings/common_settings_screen.dart';
+import '../material/global_materials_screen.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
-
-  Future<void> _showLogoutDialog(
-    BuildContext context,
-    AuthController authController,
-  ) async {
-    return showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          'Logout',
-          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
-        ),
-        content: Text(
-          'Are you sure you want to logout?',
-          style: GoogleFonts.poppins(),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Cancel',
-              style: GoogleFonts.poppins(color: Colors.grey),
-            ),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await authController.signOut();
-              if (context.mounted) {
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (context) => const LoginScreen()),
-                  (route) => false,
-                );
-              }
-            },
-            child: Text(
-              'Logout',
-              style: GoogleFonts.poppins(
-                color: Colors.red,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     final authController = Provider.of<AuthController>(context);
     final quoteController = Provider.of<QuotationController>(context);
-    final photoURL =
-        authController.user?.photoURL ??
-        authController.localUserData?['photoURL'];
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FD),
@@ -95,22 +46,11 @@ class DashboardScreen extends StatelessWidget {
                 ).showSnackBar(const SnackBar(content: Text('Sync completed')));
             },
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ProfileScreen()),
-              ),
-              child: photoURL != null && photoURL.isNotEmpty
-                  ? CircleAvatar(
-                      radius: 16,
-                      backgroundImage: NetworkImage(photoURL),
-                    )
-                  : const CircleAvatar(
-                      radius: 16,
-                      child: Icon(Icons.person, size: 18),
-                    ),
+          IconButton(
+            icon: const Icon(Icons.settings, color: Color(0xFF6A11CB)),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const SettingsScreen()),
             ),
           ),
         ],
@@ -226,6 +166,68 @@ class DashboardScreen extends StatelessWidget {
                     ),
                   ),
                 ),
+                const SizedBox(width: 15),
+                _buildMenuCard(
+                  context,
+                  'Employees',
+                  Icons.people,
+                  const Color(0xFFE91E63),
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const EmployeeScreen(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 15),
+            Row(
+              children: [
+                _buildMenuCard(
+                  context,
+                  'Materials',
+                  Icons.construction,
+                  Colors.teal,
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const GlobalMaterialsScreen(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 15),
+                _buildMenuCard(
+                  context,
+                  'Common Values',
+                  Icons.settings_suggest,
+                  const Color(0xFF673AB7),
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const CommonSettingsScreen(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 15),
+            Row(
+              children: [
+                _buildMenuCard(
+                  context,
+                  'Budget',
+                  Icons.account_balance_wallet,
+                  const Color(0xFF10B981),
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const BudgetScreen(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 15),
+                const Expanded(child: SizedBox.shrink()),
               ],
             ),
             const SizedBox(height: 25),
@@ -653,12 +655,90 @@ class DashboardScreen extends StatelessWidget {
                                       fontWeight: FontWeight.bold),
                                 ),
                                 subtitle: Text(b.quoteNumber),
-                                trailing: Text(
-                                  '₹${b.grandTotal.toStringAsFixed(2)}',
-                                  style: const TextStyle(
-                                    color: Colors.teal,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      '₹${b.grandTotal.toStringAsFixed(2)}',
+                                      style: const TextStyle(
+                                        color: Colors.teal,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline,
+                                          color: Colors.red),
+                                      onPressed: () async {
+                                        final confirmed = await showDialog<bool>(
+                                          context: context,
+                                          builder: (context) => AlertDialog(
+                                            title: Text(
+                                              'Delete Bill',
+                                              style: GoogleFonts.poppins(
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            content: Text(
+                                              'Are you sure you want to delete this bill? This will also remove it from Google Drive.',
+                                              style: GoogleFonts.poppins(),
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () =>
+                                                    Navigator.pop(context, false),
+                                                child: Text(
+                                                  'Cancel',
+                                                  style: GoogleFonts.poppins(
+                                                    color: Colors.grey,
+                                                  ),
+                                                ),
+                                              ),
+                                              TextButton(
+                                                onPressed: () =>
+                                                    Navigator.pop(context, true),
+                                                child: Text(
+                                                  'Delete',
+                                                  style: GoogleFonts.poppins(
+                                                    color: Colors.red,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+
+                                        if (confirmed == true) {
+                                          if (context.mounted) {
+                                            showDialog(
+                                              context: context,
+                                              barrierDismissible: false,
+                                              builder: (context) => const Center(
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            );
+                                          }
+
+                                          await quoteController.deleteBill(b.id);
+
+                                          if (context.mounted) {
+                                            Navigator.pop(context); // Close loader
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                content:
+                                                    Text('Bill deleted'),
+                                              ),
+                                            );
+                                          }
+                                        }
+                                      },
+                                    ),
+                                  ],
                                 ),
                                 onTap: () {
                                   Navigator.pop(context);

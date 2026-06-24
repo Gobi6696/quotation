@@ -53,107 +53,118 @@ class _InventoryScreenState extends State<InventoryScreen> {
           ),
         ],
       ),
-      body: inventory.isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF6A11CB)))
-          : inventory.items.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.inventory_2_outlined, size: 80, color: Colors.grey[300]),
-                      const SizedBox(height: 16),
-                      Text(
-                        'No items in inventory',
-                        style: GoogleFonts.poppins(color: Colors.grey, fontSize: 16),
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton.icon(
-                        onPressed: () => _addItem(context, inventory),
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add Your First Item'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF6A11CB),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: inventory.items.length,
-                  itemBuilder: (context, index) {
-                    final item = inventory.items[index];
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(15),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.all(12),
-                        leading: item.images.isNotEmpty
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
-                                child: Image.file(
-                                  File(item.images.first),
-                                  width: 50,
-                                  height: 50,
-                                  fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) => Container(
-                                    width: 50,
-                                    height: 50,
-                                    color: Colors.grey[100],
-                                    child: const Icon(Icons.broken_image, color: Colors.grey),
-                                  ),
-                                ),
-                              )
-                            : Container(
-                                width: 50,
-                                height: 50,
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[100],
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Icon(Icons.image_outlined, color: Colors.grey),
-                              ),
-                        title: Text(
-                          item.displayName,
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 15,
-                          ),
-                        ),
-                        subtitle: Text(
-                          '${item.isUnitBased ? "Unit Based" : "Area Based"} | ₹${item.isUnitBased ? item.unitRate : item.ratePerSqFt}',
-                          style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[600]),
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
+      body: RefreshIndicator(
+        color: const Color(0xFF6A11CB),
+        onRefresh: () => inventory.syncFromDrive(),
+        child: inventory.isLoading
+            ? const Center(child: CircularProgressIndicator(color: Color(0xFF6A11CB)))
+            : inventory.items.isEmpty
+                ? LayoutBuilder(
+                    builder: (context, constraints) => SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      child: Container(
+                        height: constraints.maxHeight,
+                        alignment: Alignment.center,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit_outlined, color: Colors.blueAccent),
-                              onPressed: () => _editItem(context, item, inventory),
+                            Icon(Icons.inventory_2_outlined, size: 80, color: Colors.grey[300]),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No items in inventory',
+                              style: GoogleFonts.poppins(color: Colors.grey, fontSize: 16),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                              onPressed: () => _deleteConfirm(context, item, inventory),
+                            const SizedBox(height: 24),
+                            ElevatedButton.icon(
+                              onPressed: () => _addItem(context, inventory),
+                              icon: const Icon(Icons.add),
+                              label: const Text('Add Your First Item'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF6A11CB),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: inventory.items.length,
+                    itemBuilder: (context, index) {
+                      final item = inventory.items[index];
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(15),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 10,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.all(12),
+                          leading: item.images.isNotEmpty
+                              ? ClipRRect(
+                                  borderRadius: BorderRadius.circular(10),
+                                  child: Image.file(
+                                    File(item.images.first),
+                                    width: 50,
+                                    height: 50,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) => Container(
+                                      width: 50,
+                                      height: 50,
+                                      color: Colors.grey[100],
+                                      child: const Icon(Icons.broken_image, color: Colors.grey),
+                                    ),
+                                  ),
+                                )
+                              : Container(
+                                  width: 50,
+                                  height: 50,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[100],
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(Icons.image_outlined, color: Colors.grey),
+                                ),
+                          title: Text(
+                            item.displayName,
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                            ),
+                          ),
+                          subtitle: Text(
+                            '${item.isUnitBased ? "Unit Based" : "Area Based"} | ₹${item.isUnitBased ? item.unitRate : item.ratePerSqFt}',
+                            style: GoogleFonts.poppins(fontSize: 13, color: Colors.grey[600]),
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.edit_outlined, color: Colors.blueAccent),
+                                onPressed: () => _editItem(context, item, inventory),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                onPressed: () => _deleteConfirm(context, item, inventory),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _addItem(context, inventory),
         label: Text('Add Item', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),

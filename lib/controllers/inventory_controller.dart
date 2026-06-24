@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/quotation_model.dart';
 import '../utils/file_helper.dart';
 import '../utils/drive_helper.dart';
@@ -9,20 +11,57 @@ class InventoryController with ChangeNotifier {
   final AuthController authController;
   List<QuotationItem> _items = [];
   bool _isLoading = false;
+  Timer? _autoRefreshTimer;
+  int _refreshInterval = 5;
 
   List<QuotationItem> get items => _items;
   bool get isLoading => _isLoading;
 
   InventoryController(this.authController) {
     _loadData();
+    authController.addListener(_onAuthChanged);
+  }
+
+  void _onAuthChanged() {
+    if (authController.user != null && _items.isEmpty) {
+      syncFromDrive();
+    }
+  }
+
+  @override
+  void dispose() {
+    _autoRefreshTimer?.cancel();
+    authController.removeListener(_onAuthChanged);
+    super.dispose();
   }
 
   Future<void> _loadData() async {
     _isLoading = true;
     notifyListeners();
     _items = await FileHelper.loadInventory();
+    
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _refreshInterval = prefs.getInt('auto_refresh_interval') ?? 5;
+    } catch (_) {}
+    _startAutoRefreshTimer();
+    
     _isLoading = false;
     notifyListeners();
+  }
+
+  void _startAutoRefreshTimer() {
+    _autoRefreshTimer?.cancel();
+    if (_refreshInterval > 0) {
+      _autoRefreshTimer = Timer.periodic(
+        Duration(minutes: _refreshInterval),
+        (timer) {
+          if (!_isLoading) {
+            syncFromDrive();
+          }
+        },
+      );
+    }
   }
 
   Future<void> saveItem(QuotationItem item) async {
