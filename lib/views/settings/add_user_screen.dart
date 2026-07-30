@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'user_details_screen.dart';
 
 class AddUserScreen extends StatefulWidget {
   const AddUserScreen({super.key});
@@ -25,16 +27,91 @@ class _AddUserScreenState extends State<AddUserScreen> {
     super.dispose();
   }
 
+  Future<bool> _showConfirmDialog({
+    required String title,
+    required String message,
+  }) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(
+              title,
+              style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+            ),
+            content: Text(message, style: GoogleFonts.poppins()),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(
+                  'Cancel',
+                  style: GoogleFonts.poppins(color: Colors.grey),
+                ),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text(
+                  'Proceed',
+                  style: GoogleFonts.poppins(
+                    color: Colors.redAccent,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
   Future<void> _addUser() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final email = _emailController.text.trim();
+    final currentUserEmail = FirebaseAuth.instance.currentUser?.email;
+
+    // Check if modifying own account
+    if (currentUserEmail != null &&
+        email.toLowerCase() == currentUserEmail.toLowerCase()) {
+      final proceed = await _showConfirmDialog(
+        title: 'Modify Own Account?',
+        message:
+            'Warning: You are attempting to modify your own account. If you change your role, you will lose Admin privileges and cannot reverse this action.',
+      );
+      if (!proceed) return;
+    }
 
     setState(() {
       _isLoading = true;
     });
 
-    final email = _emailController.text.trim();
-
     try {
+      // Check if user is already an Admin in Firestore
+      final docRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(email.toLowerCase());
+      final docSnap = await docRef.get();
+
+      if (docSnap.exists) {
+        final existingRole = docSnap.data()?['role'] as String?;
+        if (existingRole == 'Admin') {
+          setState(() {
+            _isLoading = false;
+          });
+
+          final proceed = await _showConfirmDialog(
+            title: 'Admin Account Warning',
+            message:
+                'Warning: This email is already registered as an Admin. Are you sure you want to change their role to $_selectedRole?',
+          );
+
+          if (!proceed) return;
+
+          setState(() {
+            _isLoading = true;
+          });
+        }
+      }
+
       // Save user to Firestore users collection
       // Document ID is lowercase email to ensure uniqueness and fast lookup
       await FirebaseFirestore.instance
@@ -89,6 +166,18 @@ class _AddUserScreenState extends State<AddUserScreen> {
           'Add User',
           style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.people_alt_outlined),
+            tooltip: 'User Details',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const UserDetailsScreen(),
+              ),
+            ),
+          ),
+        ],
         elevation: 0,
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,

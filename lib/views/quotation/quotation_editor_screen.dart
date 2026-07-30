@@ -223,6 +223,77 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
     });
   }
 
+  void _importFromInventory() {
+    final inventory = Provider.of<InventoryController>(context, listen: false);
+    if (inventory.items.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Master Inventory is empty')),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Container(
+        height: MediaQuery.of(context).size.height * 0.7,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Text(
+              'Select Item from Master Inventory',
+              style: GoogleFonts.poppins(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 15),
+            Expanded(
+              child: ListView.builder(
+                itemCount: inventory.items.length,
+                itemBuilder: (context, index) {
+                  final item = inventory.items[index];
+                  return ListTile(
+                    leading: item.images.isNotEmpty
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(5),
+                            child: Image.file(
+                              File(item.images.first),
+                              width: 40,
+                              height: 40,
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : const Icon(Icons.image_not_supported),
+                    title: Text(
+                      item.displayName,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    subtitle: Text(
+                      item.isUnitBased ? 'Unit Based' : 'Area Based',
+                    ),
+                    onTap: () {
+                      setState(() {
+                        _items.add(item.copy());
+                      });
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('${item.displayName} added!')),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _editItem(int index) {
     Navigator.push(
       context,
@@ -1107,12 +1178,28 @@ class _QuotationEditorScreenState extends State<QuotationEditorScreen> {
                   const SizedBox(height: 30),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _buildSectionTitle('Items'),
-                      TextButton.icon(
-                        onPressed: _isLoading ? null : _addItem,
-                        icon: const Icon(Icons.add),
-                        label: const Text('Add Item'),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          TextButton.icon(
+                            onPressed: _isLoading ? null : _addItem,
+                            icon: const Icon(Icons.add),
+                            label: const Text('Add Item'),
+                          ),
+                          TextButton.icon(
+                            onPressed: _isLoading ? null : _importFromInventory,
+                            icon: const Icon(Icons.inventory_2, size: 18),
+                            label: const Text('Import from Master Inventory'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF6A11CB),
+                              padding: EdgeInsets.zero,
+                              visualDensity: VisualDensity.compact,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

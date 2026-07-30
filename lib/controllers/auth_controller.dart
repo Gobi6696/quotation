@@ -119,7 +119,8 @@ class AuthController with ChangeNotifier {
           await signOut();
           throw FirebaseAuthException(
             code: 'access-denied',
-            message: 'Access Denied: You are not authorized to use this application.',
+            message:
+                'Access Denied: You are not authorized to use this application.',
           );
         }
         await _saveUserLocally(_user!);
@@ -149,7 +150,8 @@ class AuthController with ChangeNotifier {
           await signOut();
           throw FirebaseAuthException(
             code: 'access-denied',
-            message: 'Access Denied: You are not authorized to use this application.',
+            message:
+                'Access Denied: You are not authorized to use this application.',
           );
         }
         await _saveUserLocally(_user!);

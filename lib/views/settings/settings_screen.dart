@@ -5,6 +5,7 @@ import '../../controllers/auth_controller.dart';
 import '../../controllers/quotation_controller.dart';
 import '../profile/profile_screen.dart';
 import 'add_user_screen.dart';
+import 'user_details_screen.dart';
 import 'template_editor_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -42,7 +43,7 @@ class SettingsScreen extends StatelessWidget {
           ),
           const SizedBox(height: 20),
 
-          // Add User Option (Only for Admin)
+          // Add User & User Details Options (Only for Admin)
           if (authController.role == 'Admin') ...[
             _buildMenuTile(
               context,
@@ -53,6 +54,18 @@ class SettingsScreen extends StatelessWidget {
               () => Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const AddUserScreen()),
+              ),
+            ),
+            const SizedBox(height: 20),
+            _buildMenuTile(
+              context,
+              'User Details',
+              'View and manage authorized users',
+              Icons.manage_accounts,
+              const Color(0xFF2575FC),
+              () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const UserDetailsScreen()),
               ),
             ),
             const SizedBox(height: 20),

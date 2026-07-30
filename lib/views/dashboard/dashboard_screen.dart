@@ -32,6 +32,7 @@ class DashboardScreen extends StatelessWidget {
           'Quotation Master',
           style: GoogleFonts.poppins(
             fontWeight: FontWeight.bold,
+            fontSize: 18,
             color: const Color(0xFF1A1A1A),
           ),
         ),
@@ -52,6 +53,11 @@ class DashboardScreen extends StatelessWidget {
               context,
               MaterialPageRoute(builder: (context) => const SettingsScreen()),
             ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout, color: Colors.redAccent),
+            tooltip: 'Logout',
+            onPressed: () => _showLogoutDialog(context, authController),
           ),
         ],
       ),
@@ -138,7 +144,9 @@ class DashboardScreen extends StatelessWidget {
                   Colors.deepPurple,
                   () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const InventoryScreen()),
+                    MaterialPageRoute(
+                      builder: (context) => const InventoryScreen(),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 15),
@@ -267,6 +275,54 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
+  Future<void> _showLogoutDialog(
+    BuildContext context,
+    AuthController authController,
+  ) async {
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(
+          'Logout',
+          style: GoogleFonts.poppins(fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          'Are you sure you want to logout?',
+          style: GoogleFonts.poppins(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.poppins(color: Colors.grey),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await authController.signOut();
+              if (context.mounted) {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (context) => const LoginScreen()),
+                  (route) => false,
+                );
+              }
+            },
+            child: Text(
+              'Logout',
+              style: GoogleFonts.poppins(
+                color: Colors.red,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 15),
@@ -369,8 +425,10 @@ class DashboardScreen extends StatelessWidget {
                                 alignment: Alignment.centerRight,
                                 padding: const EdgeInsets.only(right: 20),
                                 color: Colors.red,
-                                child: const Icon(Icons.delete,
-                                    color: Colors.white),
+                                child: const Icon(
+                                  Icons.delete,
+                                  color: Colors.white,
+                                ),
                               ),
                               confirmDismiss: (direction) async {
                                 return await showDialog(
@@ -440,7 +498,8 @@ class DashboardScreen extends StatelessWidget {
                                 title: Text(
                                   q.clientName,
                                   style: const TextStyle(
-                                      fontWeight: FontWeight.bold),
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                                 subtitle: Text(q.quoteNumber),
                                 trailing: Row(
@@ -455,8 +514,10 @@ class DashboardScreen extends StatelessWidget {
                                     ),
                                     const SizedBox(width: 8),
                                     IconButton(
-                                      icon: const Icon(Icons.delete_outline,
-                                          color: Colors.red),
+                                      icon: const Icon(
+                                        Icons.delete_outline,
+                                        color: Colors.red,
+                                      ),
                                       onPressed: () async {
                                         final confirmed = await showDialog<bool>(
                                           context: context,
@@ -473,8 +534,10 @@ class DashboardScreen extends StatelessWidget {
                                             ),
                                             actions: [
                                               TextButton(
-                                                onPressed: () =>
-                                                    Navigator.pop(context, false),
+                                                onPressed: () => Navigator.pop(
+                                                  context,
+                                                  false,
+                                                ),
                                                 child: Text(
                                                   'Cancel',
                                                   style: GoogleFonts.poppins(
@@ -483,8 +546,10 @@ class DashboardScreen extends StatelessWidget {
                                                 ),
                                               ),
                                               TextButton(
-                                                onPressed: () =>
-                                                    Navigator.pop(context, true),
+                                                onPressed: () => Navigator.pop(
+                                                  context,
+                                                  true,
+                                                ),
                                                 child: Text(
                                                   'Delete',
                                                   style: GoogleFonts.poppins(
@@ -505,23 +570,27 @@ class DashboardScreen extends StatelessWidget {
                                               builder: (context) => const Center(
                                                 child:
                                                     CircularProgressIndicator(
-                                                  color: Colors.white,
-                                                ),
+                                                      color: Colors.white,
+                                                    ),
                                               ),
                                             );
                                           }
 
-                                          await quoteController
-                                              .deleteQuotation(q.id);
+                                          await quoteController.deleteQuotation(
+                                            q.id,
+                                          );
 
                                           if (context.mounted) {
                                             Navigator.pop(
-                                                context); // Close loader
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(
+                                              context,
+                                            ); // Close loader
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
                                               const SnackBar(
-                                                content:
-                                                    Text('Quotation deleted'),
+                                                content: Text(
+                                                  'Quotation deleted',
+                                                ),
                                               ),
                                             );
                                           }
@@ -597,8 +666,10 @@ class DashboardScreen extends StatelessWidget {
                                 alignment: Alignment.centerRight,
                                 padding: const EdgeInsets.only(right: 20),
                                 color: Colors.red,
-                                child: const Icon(Icons.delete,
-                                    color: Colors.white),
+                                child: const Icon(
+                                  Icons.delete,
+                                  color: Colors.white,
+                                ),
                               ),
                               confirmDismiss: (direction) async {
                                 return await showDialog(
@@ -644,7 +715,9 @@ class DashboardScreen extends StatelessWidget {
                                 await quoteController.deleteBill(b.id);
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(content: Text('Bill deleted')),
+                                    const SnackBar(
+                                      content: Text('Bill deleted'),
+                                    ),
                                   );
                                 }
                               },
@@ -652,7 +725,8 @@ class DashboardScreen extends StatelessWidget {
                                 title: Text(
                                   b.clientName,
                                   style: const TextStyle(
-                                      fontWeight: FontWeight.bold),
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                                 subtitle: Text(b.quoteNumber),
                                 trailing: Row(
@@ -667,8 +741,10 @@ class DashboardScreen extends StatelessWidget {
                                     ),
                                     const SizedBox(width: 8),
                                     IconButton(
-                                      icon: const Icon(Icons.delete_outline,
-                                          color: Colors.red),
+                                      icon: const Icon(
+                                        Icons.delete_outline,
+                                        color: Colors.red,
+                                      ),
                                       onPressed: () async {
                                         final confirmed = await showDialog<bool>(
                                           context: context,
@@ -685,8 +761,10 @@ class DashboardScreen extends StatelessWidget {
                                             ),
                                             actions: [
                                               TextButton(
-                                                onPressed: () =>
-                                                    Navigator.pop(context, false),
+                                                onPressed: () => Navigator.pop(
+                                                  context,
+                                                  false,
+                                                ),
                                                 child: Text(
                                                   'Cancel',
                                                   style: GoogleFonts.poppins(
@@ -695,8 +773,10 @@ class DashboardScreen extends StatelessWidget {
                                                 ),
                                               ),
                                               TextButton(
-                                                onPressed: () =>
-                                                    Navigator.pop(context, true),
+                                                onPressed: () => Navigator.pop(
+                                                  context,
+                                                  true,
+                                                ),
                                                 child: Text(
                                                   'Delete',
                                                   style: GoogleFonts.poppins(
@@ -717,21 +797,25 @@ class DashboardScreen extends StatelessWidget {
                                               builder: (context) => const Center(
                                                 child:
                                                     CircularProgressIndicator(
-                                                  color: Colors.white,
-                                                ),
+                                                      color: Colors.white,
+                                                    ),
                                               ),
                                             );
                                           }
 
-                                          await quoteController.deleteBill(b.id);
+                                          await quoteController.deleteBill(
+                                            b.id,
+                                          );
 
                                           if (context.mounted) {
-                                            Navigator.pop(context); // Close loader
-                                            ScaffoldMessenger.of(context)
-                                                .showSnackBar(
+                                            Navigator.pop(
+                                              context,
+                                            ); // Close loader
+                                            ScaffoldMessenger.of(
+                                              context,
+                                            ).showSnackBar(
                                               const SnackBar(
-                                                content:
-                                                    Text('Bill deleted'),
+                                                content: Text('Bill deleted'),
                                               ),
                                             );
                                           }
